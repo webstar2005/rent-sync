@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* Brand palette — black + burgundy (Section 2) */
+  --color-burgundy-50: #F7E9EB;
+  --color-burgundy-600: #7A1428;
+  --color-burgundy-700: #5C0F1F;
+  --color-ink: #0D0D0D;
+  --color-gray-100: #F5F5F5;
+  --color-gray-500: #6B6B6B;
+  --color-gray-900: #1A1A1A;
+  --color-background: #FFFFFF;
+  --color-foreground: #1A1A1A;
+
+  /* Typography — Sora (heading) + Inter (body) */
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
+  --font-sans: var(--font-body);
+
+  /* Radius scale */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+}
+
+/* Base resets */
+* {
+  border-color: #E5E5E5;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-gray-900);
+  font-family: var(--font-body), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-heading), sans-serif;
+  color: var(--color-ink);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+/* Focus ring — accessible, burgundy-tinted */
+:focus-visible {
+  outline: 2px solid var(--color-burgundy-600);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: var(--color-burgundy-50);
+  color: var(--color-burgundy-700);
+}

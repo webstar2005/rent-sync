@@ -1,0 +1,49 @@
+$kind: http-request
+name: Initiate STK Push
+method: POST
+url: '{{BASE_URL}}/mpesa/stkpush/v1/processrequest'
+order: 2000
+headers:
+  - key: Authorization
+    value: 'Bearer {{ACCESS_TOKEN}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "BusinessShortCode": "{{MPESA_SHORTCODE}}",
+      "Password": "{{STK_PASSWORD}}",
+      "Timestamp": "{{STK_TIMESTAMP}}",
+      "TransactionType": "CustomerPayBillOnline",
+      "Amount": 1,
+      "PartyA": "254712345678",
+      "PartyB": "{{MPESA_SHORTCODE}}",
+      "PhoneNumber": "254712345678",
+      "CallBackURL": "{{MPESA_CALLBACK_URL}}",
+      "AccountReference": "RentSync",
+      "TransactionDesc": "Rent payment"
+    }
+scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      const shortcode = pm.environment.get("MPESA_SHORTCODE");
+      const passkey = pm.environment.get("MPESA_PASSKEY");
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const timestamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const password = btoa(`${shortcode}${passkey}${timestamp}`);
+      pm.environment.set("STK_TIMESTAMP", timestamp);
+      pm.environment.set("STK_PASSWORD", password);
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("STK Push accepted", () => {
+        pm.response.to.have.status(200);
+        const json = pm.response.json();
+        pm.expect(json.ResponseCode).to.eql("0");
+        pm.expect(json.CheckoutRequestID).to.be.a("string");
+        pm.environment.set("CHECKOUT_REQUEST_ID", json.CheckoutRequestID);
+        console.log("✅ STK Push initiated, CheckoutRequestID:", json.CheckoutRequestID);
+      });

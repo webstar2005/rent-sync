@@ -1,0 +1,30 @@
+name: M-Pesa Sandbox
+values:
+  - key: BASE_URL
+    value: 'https://sandbox.safaricom.co.ke'
+    enabled: true
+    type: default
+  - key: MPESA_CONSUMER_KEY
+    value: '0YM78kHiCdfoZAT5dnYJNEZIYAexM7JMbGBBPBZTyXpWdjOS'
+    enabled: true
+    type: default
+  - key: MPESA_CONSUMER_SECRET
+    value: ''
+    enabled: true
+    type: default
+  - key: MPESA_SHORTCODE
+    value: '174379'
+    enabled: true
+    type: default
+  - key: MPESA_PASSKEY
+    value: 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919'
+    enabled: true
+    type: default
+  - key: MPESA_CALLBACK_URL
+    value: 'http://localhost:4000/api/mpesa/callback'
+    enabled: true
+    type: default
+  - key: ACCESS_TOKEN
+    value: ''
+    enabled: true
+    type: default

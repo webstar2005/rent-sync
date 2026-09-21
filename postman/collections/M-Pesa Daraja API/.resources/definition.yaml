@@ -1,0 +1,8 @@
+$kind: collection
+name: M-Pesa Daraja API
+description: |-
+  Test collection for M-Pesa Daraja API integration.
+  Covers OAuth token generation, STK Push initiation, and the callback webhook.
+variables:
+  - key: BASE_URL
+    value: 'https://sandbox.safaricom.co.ke'

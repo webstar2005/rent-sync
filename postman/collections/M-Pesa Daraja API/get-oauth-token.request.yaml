@@ -1,0 +1,28 @@
+$kind: http-request
+name: Get OAuth Token
+method: GET
+url: '{{BASE_URL}}/oauth/v1/generate?grant_type=client_credentials'
+order: 1000
+queryParams:
+  - key: grant_type
+    value: client_credentials
+auth:
+  type: basic
+  credentials:
+    - key: username
+      value: '{{MPESA_CONSUMER_KEY}}'
+    - key: password
+      value: '{{MPESA_CONSUMER_SECRET}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const jsonData = pm.response.json();
+      pm.test("Status is 200", () => {
+        pm.response.to.have.status(200);
+      });
+      pm.test("Token received", () => pm.expect(jsonData.access_token).to.be.a("string"));
+      if (jsonData.access_token) {
+        pm.environment.set("ACCESS_TOKEN", jsonData.access_token);
+        console.log("✅ Daraja token saved to ACCESS_TOKEN");
+      }

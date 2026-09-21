@@ -1,0 +1,36 @@
+$kind: http-request
+name: STK Push Callback
+method: POST
+url: 'http://localhost:4000/api/mpesa/callback'
+order: 3000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "Body": {
+        "stkCallback": {
+          "MerchantRequestID": "mock-merchant-001",
+          "CheckoutRequestID": "{{CHECKOUT_REQUEST_ID}}",
+          "ResultCode": 0,
+          "ResultDesc": "The service request is processed successfully.",
+          "CallbackMetadata": {
+            "Item": [
+              { "Name": "Amount", "Value": 1 },
+              { "Name": "MpesaReceiptNumber", "Value": "NLJ7RT61SV" },
+              { "Name": "TransactionDate", "Value": 20191219102115 },
+              { "Name": "PhoneNumber", "Value": 254712345678 }
+            ]
+          }
+        }
+      }
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Callback accepted by server", () => {
+        pm.response.to.have.status(200);
+      });
