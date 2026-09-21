@@ -21,6 +21,7 @@ if (!phone) {
 }
 
 const externalReference = `INV-${Date.now()}`;
+let pollRef = externalReference;
 
 console.log(`Initiating STK push -> channel ${channelId}, amount ${amount} KES, phone ${phone}`);
 console.log(`external_reference      = ${externalReference}`);
@@ -29,19 +30,21 @@ if (callbackUrl) console.log(`callback_url             = ${callbackUrl}`);
 try {
   const init = await initiateStkPush({ amount, phoneNumber: phone, channelId, externalReference, callbackUrl });
   console.log('\n== initiateStkPush() ==');
-  console.log(JSON.stringify(init, null, 2)); // typically { checkout_request_id, reference, status_code, message }
+  console.log(JSON.stringify(init, null, 2)); // typically { success, status, reference, CheckoutRequestID, external_reference }
+  // transaction-status looks up by the returned `reference`, not the external reference
+  pollRef = init.reference || init.CheckoutRequestID || externalReference;
 } catch (error) {
   console.error('\n== initiateStkPush() ERROR ==');
   console.error(error.message);
   process.exit(1);
 }
 
-console.log(`\nPolling status for ${externalReference}...`);
+console.log(`\nPolling status for ${pollRef}...`);
 const deadline = Date.now() + 60_000;
 for (let round = 0; Date.now() < deadline; round++) {
   await new Promise((r) => setTimeout(r, 4000));
   try {
-    const status = await getTransactionStatus(externalReference);
+    const status = await getTransactionStatus(pollRef);
     console.log(`[${round + 1}]`, JSON.stringify(status));
     const text = JSON.stringify(status).toLowerCase();
     if (text.includes('success') || text.includes('completed') || text.includes('processed')) break;
