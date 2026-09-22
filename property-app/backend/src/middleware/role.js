@@ -8,8 +8,5 @@ export function requireRole(...allowed) {
   };
 }
 
-// Convenience wrappers per PLAN.md 11.3 placeholder boundaries:
-// owner=full, manager=no financial reports, staff=maintenance-only
+// owner=full; when manager/staff roles are added, gate financial features with requireRole('landlord','manager')
 export const requireOwnerOrAdmin = requireRole('landlord', 'admin');
-export const requireManagerUp = requireRole('landlord', 'manager', 'admin');
-export const requireStaffUp = requireRole('landlord', 'manager', 'admin'); // staff would be separate if tenants get login; for now treat as landlord/manager/admin

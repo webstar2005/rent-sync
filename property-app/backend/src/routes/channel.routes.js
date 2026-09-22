@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireOwnerOrAdmin } from '../middleware/role.js';
-import { mpesaLimiter } from '../middleware/rateLimit.js';
+import { channelLimiter } from '../middleware/rateLimit.js';
 import { registerChannel, listChannels, getServiceWalletBalance, lowBalanceThreshold, payheroBaseUrl } from '../services/payhero.js';
 import { logger, alertError } from '../utils/logger.js';
 
@@ -33,13 +33,14 @@ router.get('/', async (req, res) => {
     );
     return res.json(result.rows);
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch payment channels', error: error.message });
+    logger.error({ err: error.message }, 'Failed to fetch payment channels');
+    return res.status(500).json({ message: 'Failed to fetch payment channels' });
   }
 });
 
 // Create a channel locally + register it with PayHero in one step. Idempotent — re-adding the same
 // short code + type returns the existing row instead of duplicating.
-router.post('/', mpesaLimiter, async (req, res) => {
+router.post('/', channelLimiter, async (req, res) => {
   try {
     const payload = channelSchema.parse(req.body);
     const ownerId = req.user.sub;
@@ -88,9 +89,9 @@ router.post('/', mpesaLimiter, async (req, res) => {
     }
     logger.error({ err: error.message }, 'Payment channel creation failed');
     if (/not configured|responded/.test(error.message)) {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ message: 'Payment channel could not be registered — check your PayHero configuration.' });
     }
-    return res.status(500).json({ message: 'Failed to register payment channel', error: error.message });
+    return res.status(500).json({ message: 'Failed to register payment channel' });
   }
 });
 
@@ -132,7 +133,8 @@ router.patch('/:channelId', async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ message: error.errors[0].message });
     }
-    return res.status(500).json({ message: 'Failed to update payment channel', error: error.message });
+    logger.error({ err: error.message }, 'Failed to update payment channel');
+    return res.status(500).json({ message: 'Failed to update payment channel' });
   }
 });
 
@@ -177,13 +179,28 @@ router.post('/:channelId/sync', async (req, res) => {
     return res.json(result.rows[0]);
   } catch (error) {
     logger.error({ err: error.message }, 'Payment channel sync failed');
-    return res.status(500).json({ message: 'Failed to sync payment channel with PayHero', error: error.message });
+    return res.status(500).json({ message: 'Failed to sync payment channel with PayHero' });
   }
 });
 
-// Service wallet balance — PayHero uses a prepaid wallet; a depleted wallet silently blocks new transactions.
+// NOTE — shared-account disclosure awareness. PayHero service wallets are account-wide: every
+// PaymentChannel on this deployment draws from the SAME prepaid wallet. The balance below is
+// therefore a shared business figure, visible to any authenticated owner. That is by design for a
+// single-operator deployment, but if you ever onboard independent landlords onto one PayHero account,
+// this endpoint must be gated to a primary account holder instead. The 60s cache also stops a polling
+// dashboard from hammering PayHero (and re-raising the low-balance alert on every read).
+const WALLET_CACHE_TTL_MS = 60 * 1000;
+// Cache is skipped under test so suites that swap the PayHero mock see live values each request.
+const WALLET_CACHE_ENABLED = process.env.NODE_ENV !== 'test';
+let walletCache = { at: 0, body: null };
+
 router.get('/wallet', async (req, res) => {
   try {
+    const now = Date.now();
+    if (WALLET_CACHE_ENABLED && walletCache.body && now - walletCache.at < WALLET_CACHE_TTL_MS) {
+      return res.json(walletCache.body);
+    }
+
     const balance = await getServiceWalletBalance();
     const available = Number(balance?.available_balance ?? balance?.balance ?? 0);
     const threshold = lowBalanceThreshold();
@@ -191,18 +208,22 @@ router.get('/wallet', async (req, res) => {
     if (low) {
       alertError(`payhero_low_wallet_balance`, new Error(`PayHero service wallet balance KES ${available} is below the KES ${threshold} warning threshold`));
     }
-    return res.json({
+    const body = {
       currency: balance?.currency ?? 'KES',
       available_balance: available,
       low,
       threshold,
       payhero_base_url: payheroBaseUrl(),
-    });
+    };
+    walletCache = { at: now, body };
+    return res.json(body);
   } catch (error) {
     if (/not configured|responded/.test(error.message)) {
-      return res.status(400).json({ message: error.message });
+      logger.error({ err: error.message }, 'PayHero wallet fetch rejected');
+      return res.status(400).json({ message: 'Could not fetch PayHero wallet balance — check your configuration.' });
     }
-    return res.status(500).json({ message: 'Failed to fetch PayHero wallet balance', error: error.message });
+    logger.error({ err: error.message }, 'Failed to fetch PayHero wallet balance');
+    return res.status(500).json({ message: 'Failed to fetch PayHero wallet balance' });
   }
 });
 

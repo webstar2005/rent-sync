@@ -29,6 +29,6 @@ export const faqs: FaqItem[] = [
   {
     question: "Is there a free trial?",
     answer:
-      "Yes. Start free and explore the platform. Contact us for trial length and onboarding support details.",
+      "Yes. Start free and explore the platform. Trial length and onboarding support can be confirmed when you set up your account.",
   },
 ];

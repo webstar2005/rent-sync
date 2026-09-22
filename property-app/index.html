@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#7A1428" />
+    <!--
+      CSP — if the API is served from a different origin than this dashboard in production,
+      add that origin to connect-src (e.g. https://api.example.com). 'unsafe-inline' in script-src
+      is required by the Google Identity Services button; style-src 'unsafe-inline' is required by
+      inline styles. Everything else is locked to self/data/localhost-dev.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://accounts.google.com; font-src 'self' data:; connect-src 'self' http://localhost:4000 ws://localhost:4000 ws://localhost:5173 https://accounts.google.com https://api.rentsync.africa; frame-src 'self' https://accounts.google.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
     <title>Rent Sync - App</title>
   </head>
   <body>

@@ -23,6 +23,7 @@ A lightweight Node.js + Express + PostgreSQL backend for the property management
 - `POST /api/tenants`
 - `GET /api/invoices`
 - `POST /api/invoices`
+- `POST /api/invoices/generate` — (landlord/admin) auto-generate next month's rent invoices for the caller's ACTIVE tenants on ACTIVE properties; idempotent (skips periods already billed), also flips unpaid pending invoices past their due date to `overdue`. Optional body `{ "month": "YYYY-MM" }` (defaults to next calendar month); `due_date` = the property's `rent_due_day`; `amount` = the tenant's `monthly_rent`; `invoice_number` = `INV-<tenantId>-<YYYYMM>`.
 - `GET /api/payments`
 - `POST /api/payments`
 - `GET /api/maintenance`
@@ -40,13 +41,17 @@ A lightweight Node.js + Express + PostgreSQL backend for the property management
 
 - `POST /webhooks/payhero` — incoming payment callbacks from PayHero. Verify with `PAYHERO_WEBHOOK_SECRET` (`x-payhero-secret` header or `?secret=` query; fails closed in production), optional `PAYHERO_IP_ALLOWLIST`. Resolves the landlord by channel id / short code, then reference (invoice number) / strictly-unique phone. Unmatched money is always recorded against the channel owner (`matched=false`) for manual reconciliation; retried callbacks are deduped on `transaction_ref`.
 
+### Cron
+
+- `POST /api/cron/invoices` — system-wide billing job: generates next month's invoices for every ACTIVE tenant (all owners) and flips unpaid `pending` invoices past their due date to `overdue`. Guarded by `x-cron-secret` (open when `CRON_SECRET` is unset); run it monthly via pg_cron / GitHub Actions / any external scheduler.
+
 ## Testing
 
 Run against a separate test database (default `postgresql://postgres:postgres@localhost:5432/property_app_test`, override with `DATABASE_URL_TEST`):
 
-    npm test
+    DATABASE_URL_TEST=postgresql://postgres:postgres@localhost:5432/property_app_test npm test
 
-Schema + migrations are applied automatically; PayHero HTTP is mocked in-process.
+Note: test files share one test database, so the script runs them serially (`--test-concurrency=1`). Schema + migrations are applied automatically; PayHero HTTP is mocked in-process.
 
 ## Database schema
 

@@ -27,8 +27,8 @@ export const bulkLimiter = rateLimit({
   message: { message: 'Too many bulk imports, please try again later' },
 });
 
-// M-Pesa webhook: 60 / minute per IP, plus idempotency already via transaction_ref unique
-export const mpesaLimiter = rateLimit({
+// Payment channel registration: 60 / minute per IP
+export const channelLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
   standardHeaders: true,

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   auth_provider TEXT NOT NULL DEFAULT 'local' CHECK (auth_provider IN ('local', 'google')),
   google_sub TEXT,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  token_version INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (google_sub)
@@ -25,23 +26,6 @@ CREATE TABLE IF NOT EXISTS properties (
   units INTEGER NOT NULL DEFAULT 1,
   rent_due_day INTEGER NOT NULL DEFAULT 5 CHECK (rent_due_day BETWEEN 1 AND 28),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'maintenance')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS property_payment_settings (
-  id SERIAL PRIMARY KEY,
-  property_id INTEGER NOT NULL UNIQUE REFERENCES properties(id) ON DELETE CASCADE,
-  mpesa_paybill TEXT,
-  mpesa_account_number TEXT,
-  mpesa_till TEXT,
-  mpesa_account_number_format TEXT DEFAULT 'invoice_number',
-  bank_name TEXT,
-  bank_account_name TEXT,
-  bank_account_number TEXT,
-  bank_reference_format TEXT DEFAULT 'invoice_number',
-  allowed_methods TEXT[] NOT NULL DEFAULT ARRAY['mobile_money', 'bank_transfer'],
-  notes TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -134,6 +118,7 @@ CREATE TABLE IF NOT EXISTS payhero_callback_log (
 -- Raw payment callbacks and reconciliation attempts for audit and review
 CREATE TABLE IF NOT EXISTS payment_reconciliation_events (
   id SERIAL PRIMARY KEY,
+  owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL,
   tenant_id INTEGER REFERENCES tenants(id) ON DELETE SET NULL,
   payment_method TEXT NOT NULL DEFAULT 'mobile_money',
@@ -179,6 +164,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_owner_id ON payments(owner_id);
 CREATE INDEX IF NOT EXISTS idx_payments_payment_channel_id ON payments(payment_channel_id);
 CREATE INDEX IF NOT EXISTS idx_payment_reconciliation_invoice_id ON payment_reconciliation_events(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_payment_reconciliation_transaction_ref ON payment_reconciliation_events(transaction_ref);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_events_owner_created ON payment_reconciliation_events (owner_id, created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_channels_payhero_channel_id ON payment_channels(payhero_channel_id) WHERE payhero_channel_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_payment_channels_owner_id ON payment_channels(owner_id);
 CREATE INDEX IF NOT EXISTS idx_payment_channels_short_code ON payment_channels(short_code);
@@ -202,10 +188,6 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TRIGGER properties_updated_at
 BEFORE UPDATE ON properties
-FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
-CREATE TRIGGER property_payment_settings_updated_at
-BEFORE UPDATE ON property_payment_settings
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TRIGGER payment_channels_updated_at

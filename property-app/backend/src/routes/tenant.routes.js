@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool, query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { bulkLimiter } from '../middleware/rateLimit.js';
+import { logger } from '../utils/logger.js';
 
 // --- Bulk import helpers (Section 11 Core CRUD phase) ---
 function normalizeKenyanPhone(raw) {
@@ -167,7 +168,8 @@ router.post('/bulk', bulkLimiter, async (req, res) => {
     });
   } catch (error) {
     await client.query('ROLLBACK');
-    return res.status(500).json({ message: 'Bulk import failed', error: error.message });
+    logger.error({ err: error.message }, 'Bulk import failed');
+    return res.status(500).json({ message: 'Bulk import failed' });
   } finally {
     client.release();
   }
@@ -186,7 +188,8 @@ router.get('/', async (req, res) => {
 
     return res.json(result.rows);
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch tenants', error: error.message });
+    logger.error({ err: error.message }, 'Failed to fetch tenants');
+    return res.status(500).json({ message: 'Failed to fetch tenants' });
   }
 });
 
@@ -221,7 +224,8 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: error.errors[0].message });
     }
 
-    return res.status(500).json({ message: 'Failed to create tenant', error: error.message });
+    logger.error({ err: error.message }, 'Failed to create tenant');
+    return res.status(500).json({ message: 'Failed to create tenant' });
   }
 });
 
@@ -256,7 +260,8 @@ router.patch('/:tenantId/status', async (req, res) => {
       return res.status(400).json({ message: error.errors[0].message });
     }
 
-    return res.status(500).json({ message: 'Failed to update tenant status', error: error.message });
+    logger.error({ err: error.message }, 'Failed to update tenant status');
+    return res.status(500).json({ message: 'Failed to update tenant status' });
   }
 });
 
@@ -279,7 +284,8 @@ router.delete('/:tenantId', async (req, res) => {
     await query('DELETE FROM tenants WHERE id = $1', [tenantId]);
     return res.status(204).send();
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to delete tenant', error: error.message });
+    logger.error({ err: error.message }, 'Failed to delete tenant');
+    return res.status(500).json({ message: 'Failed to delete tenant' });
   }
 });
 

@@ -2,7 +2,8 @@ import express from 'express';
 import { z } from 'zod';
 import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
-import { sendSms, smsTemplates } from '../services/sms.js';
+import { requireOwnerOrAdmin } from '../middleware/role.js';
+import { generateMonthlyInvoices, markOverdueInvoices } from '../services/invoiceService.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
@@ -14,6 +15,10 @@ const invoiceSchema = z.object({
   amount: z.number().min(0),
   due_date: z.string().min(1),
   notes: z.string().optional(),
+});
+
+const invoiceGenerateSchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be YYYY-MM').optional(),
 });
 
 router.use(requireAuth);
@@ -32,7 +37,8 @@ router.get('/', async (req, res) => {
 
     return res.json(result.rows);
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch invoices', error: error.message });
+    logger.error({ err: error.message }, 'Failed to fetch invoices');
+    return res.status(500).json({ message: 'Failed to fetch invoices' });
   }
 });
 
@@ -65,29 +71,34 @@ router.post('/', async (req, res) => {
       [payload.tenant_id, payload.property_id, payload.invoice_number, payload.amount, payload.due_date, payload.notes ?? null]
     );
 
-    // SMS: invoice created (fire-and-forget, don't block response)
-    ;(async () => {
-      try {
-        const tenant = await query('SELECT phone, name FROM tenants WHERE id=$1', [payload.tenant_id]);
-        const phone = tenant.rows[0]?.phone;
-        const tenantName = tenant.rows[0]?.name ?? 'tenant';
-        const prop = await query('SELECT name FROM properties WHERE id=$1', [payload.property_id]);
-        const propName = prop.rows[0]?.name ?? 'property';
-        if (phone) {
-          await sendSms({ to: phone, message: smsTemplates().invoiceCreated(tenantName, payload.amount, payload.due_date, propName) });
-        }
-      } catch (e) {
-        logger.warn({ err: e.message }, 'SMS invoiceCreated failed (non-blocking)');
-      }
-    })();
-
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ message: error.errors[0].message });
     }
 
-    return res.status(500).json({ message: 'Failed to create invoice', error: error.message });
+    logger.error({ err: error.message }, 'Failed to create invoice');
+    return res.status(500).json({ message: 'Failed to create invoice' });
+  }
+});
+
+// Auto-generate next month's rent invoices for the caller's ACTIVE tenants on ACTIVE properties.
+// Idempotent — re-running never duplicates an already-billed period. Also flips unpaid pending
+// invoices that have fallen past their due date to `overdue`.
+router.post('/generate', requireOwnerOrAdmin, async (req, res) => {
+  try {
+    const params = invoiceGenerateSchema.parse(req.body ?? {});
+    const [generated, overdue] = await Promise.all([
+      generateMonthlyInvoices({ ownerId: req.user.sub, month: params.month }),
+      markOverdueInvoices({ ownerId: req.user.sub }),
+    ]);
+    return res.json({ ...generated, overdue_marked: overdue.marked });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
+    logger.error({ err: error.message }, 'Invoice generation failed');
+    return res.status(500).json({ message: 'Failed to generate invoices' });
   }
 });
 

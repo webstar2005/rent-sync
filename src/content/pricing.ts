@@ -43,6 +43,6 @@ export const pricingTiers: PricingTier[] = [
     billingUnit: "",
     description: "For 150+ units. Tailored to your operations.",
     features: ["Unlimited units", "Custom integrations", "Dedicated support", "SLA & onboarding"],
-    ctaLabel: "Contact Sales",
+    ctaLabel: "Get Started",
   },
 ];

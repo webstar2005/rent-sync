@@ -13,6 +13,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL_TEST || 'postgresql://postgr
 process.env.PAYHERO_AUTH_TOKEN = process.env.PAYHERO_AUTH_TOKEN || 'test-payhero-token';
 process.env.PAYHERO_ACCOUNT_ID = process.env.PAYHERO_ACCOUNT_ID || '5000';
 process.env.PAYHERO_WEBHOOK_SECRET = process.env.PAYHERO_WEBHOOK_SECRET || 'test-webhook-secret';
+process.env.CRON_SECRET = process.env.CRON_SECRET || 'test-cron-secret';
 process.env.PAYHERO_LOW_BALANCE_ALERT = '500';
 
 import fs from 'node:fs';
@@ -57,7 +58,7 @@ export async function applySchema() {
 export async function resetDb() {
   await pool.query(
     `TRUNCATE payhero_callback_log, payments, payment_reconciliation_events, payment_channels,
-     invoices, tenants, properties, maintenance_requests, property_members, property_payment_settings, users
+     invoices, tenants, properties, maintenance_requests, property_members, users
      RESTART IDENTITY CASCADE`
   );
 }
@@ -86,10 +87,10 @@ export async function seedProperty(ownerId, { name = 'Test Property', address = 
   return row.rows[0];
 }
 
-export async function seedTenant(propertyId, { name = 'Jane Doe', phone = '0700111222', unit_number = 'A1', monthly_rent = 10000 } = {}) {
+export async function seedTenant(propertyId, { name = 'Jane Doe', phone = '0700111222', unit_number = 'A1', monthly_rent = 10000, status = 'active' } = {}) {
   const row = await pool.query(
-    `INSERT INTO tenants (property_id, name, phone, unit_number, monthly_rent) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [propertyId, name, phone, unit_number, monthly_rent]
+    `INSERT INTO tenants (property_id, name, phone, unit_number, monthly_rent, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [propertyId, name, phone, unit_number, monthly_rent, status]
   );
   return row.rows[0];
 }
@@ -98,6 +99,15 @@ export async function seedInvoice(tenantId, propertyId, { invoice_number, amount
   const row = await pool.query(
     `INSERT INTO invoices (tenant_id, property_id, invoice_number, amount, due_date, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
     [tenantId, propertyId, invoice_number, amount, due_date, status]
+  );
+  return row.rows[0];
+}
+
+export async function seedPayment(ownerId, tenantId, invoiceId, { amount = 4000, payment_method = 'mobile_money', reference = null, transaction_ref = null, status = 'completed', paid_at = new Date(), matched = true, payment_channel_id = null } = {}) {
+  const row = await pool.query(
+    `INSERT INTO payments (owner_id, tenant_id, invoice_id, amount, payment_method, reference, transaction_ref, status, paid_at, matched, payment_channel_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+    [ownerId, tenantId, invoiceId, amount, payment_method, reference ?? null, transaction_ref ?? null, status, paid_at, matched, payment_channel_id]
   );
   return row.rows[0];
 }

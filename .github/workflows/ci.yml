@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend tests (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: property_app_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: property-app/backend/package-lock.json
+
+      - name: Install backend deps
+        working-directory: property-app/backend
+        run: npm ci
+
+      - name: Run backend tests
+        working-directory: property-app/backend
+        run: npm test
+        env:
+          DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/property_app_test
+
+  property-app:
+    name: Client typecheck / lint / build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: property-app/package-lock.json
+
+      - name: Install client deps
+        working-directory: property-app
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: property-app
+        run: npx tsc -b
+
+      - name: Lint
+        working-directory: property-app
+        run: npx oxlint
+
+      - name: Build
+        working-directory: property-app
+        run: npm run build
+
+  marketing-site:
+    name: Marketing site lint / build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install marketing deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build

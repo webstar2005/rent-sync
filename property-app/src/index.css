@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-burgundy-50: #F7E9EB;
-  --color-burgundy-600: #7A1428;
-  --color-burgundy-700: #5C0F1F;
-  --color-ink: #0D0D0D;
-  --color-gray-100: #F5F5F5;
-  --color-gray-500: #6B6B6B;
-  --color-gray-900: #1A1A1A;
-  --color-background: #FFFFFF;
-  --color-foreground: #1A1A1A;
+  --color-burgundy-50: #2B1A1E;
+  --color-burgundy-600: #B32743;
+  --color-burgundy-700: #D07387;
+  --color-ink: #F6F2F3;
+  --color-gray-100: #221C1E;
+  --color-gray-500: #A49DA1;
+  --color-gray-900: #F6F2F3;
+  --color-background: #0D0A0B;
+  --color-foreground: #F6F2F3;
   --font-heading: var(--font-heading);
   --font-body: var(--font-body);
   --radius-sm: 6px;
@@ -19,10 +19,11 @@
   --radius-2xl: 20px;
 }
 
-* { border-color: #E5E5E5; }
+:root { color-scheme: dark; }
+* { border-color: #2A2225; }
 html { scroll-behavior: smooth; }
 body {
-  background: linear-gradient(180deg, #fffaf9 0%, #f9f4f5 36%, #f8f5f6 100%);
+  background: linear-gradient(180deg, #0D0A0B 0%, #110D0F 36%, #141012 100%);
   color: var(--color-gray-900);
   font-family: var(--font-body), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -31,4 +32,6 @@ body {
 h1, h2, h3, h4 { font-family: var(--font-heading), sans-serif; color: var(--color-ink); font-weight: 700; letter-spacing: -0.015em; }
 :focus-visible { outline: 2px solid var(--color-burgundy-600); outline-offset: 2px; }
 ::selection { background: var(--color-burgundy-50); color: var(--color-burgundy-700); }
+::placeholder { color: #6E6468; }
 input, select, textarea, button { transition: all 180ms ease; }
+select option { background: #161112; color: #F6F2F3; }

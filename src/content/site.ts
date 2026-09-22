@@ -11,13 +11,4 @@ export const siteConfig: SiteConfig = {
   // Live dashboard URL — dev: Vite on :5173, prod: app.rentsync.co.ke (or your domain)
   // Change to your deployed property-app URL before handing to landlord
   appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5173",
-  contact: {
-    email: "hello@rentsync.co.ke",
-    phone: "+254 700 000 000",
-    address: "Nairobi, Kenya",
-  },
-  social: [
-    { label: "LinkedIn", href: "https://www.linkedin.com" },
-    { label: "X", href: "https://x.com" },
-  ],
 };

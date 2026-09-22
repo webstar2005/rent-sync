@@ -306,9 +306,9 @@ router.post('/', payheroWebhookLimiter, async (req, res) => {
     const preExisting = await query('SELECT id FROM payments WHERE transaction_ref = $1', [transactionRef]);
     if (preExisting.rows.length > 0) {
       await query(
-        `INSERT INTO payment_reconciliation_events (invoice_id, tenant_id, payment_method, transaction_ref, payment_channel_id, raw_payload, match_status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'duplicate')`,
-        [invoice?.id ?? null, tenant?.id ?? null, 'mobile_money', transactionRef, channelResolution.channel?.id ?? null, rawPayload]
+        `INSERT INTO payment_reconciliation_events (invoice_id, tenant_id, owner_id, payment_method, transaction_ref, payment_channel_id, raw_payload, match_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'duplicate')`,
+        [invoice?.id ?? null, tenant?.id ?? null, ownerId, 'mobile_money', transactionRef, channelResolution.channel?.id ?? null, rawPayload]
       );
       await updateLog(logId, {
         status: 'duplicate',
@@ -370,9 +370,9 @@ router.post('/', payheroWebhookLimiter, async (req, res) => {
 
     const matchStatus = matched && invoice ? 'matched' : 'manual_review';
     await query(
-      `INSERT INTO payment_reconciliation_events (invoice_id, tenant_id, payment_method, transaction_ref, payment_channel_id, raw_payload, match_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [invoice?.id ?? null, tenant?.id ?? null, paymentMethodFor(channelResolution.channel?.channel_type ?? 'paybill'), transactionRef, channelResolution.channel?.id ?? null, rawPayload, matchStatus]
+      `INSERT INTO payment_reconciliation_events (invoice_id, tenant_id, owner_id, payment_method, transaction_ref, payment_channel_id, raw_payload, match_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [invoice?.id ?? null, tenant?.id ?? null, ownerId, paymentMethodFor(channelResolution.channel?.channel_type ?? 'paybill'), transactionRef, channelResolution.channel?.id ?? null, rawPayload, matchStatus]
     );
 
     await updateLog(logId, {

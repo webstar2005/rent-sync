@@ -11,8 +11,8 @@ import tenantRoutes from './routes/tenant.routes.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import maintenanceRoutes from './routes/maintenance.routes.js';
-import mpesaRoutes from './routes/mpesa.routes.js';
 import reconciliationRoutes from './routes/reconciliation.routes.js';
+import reportRoutes from './routes/report.routes.js';
 import cronRoutes from './routes/cron.routes.js';
 import channelRoutes from './routes/channel.routes.js';
 import payheroWebhookRoutes from './routes/payheroWebhook.routes.js';
@@ -20,7 +20,24 @@ import payheroWebhookRoutes from './routes/payheroWebhook.routes.js';
 const app = express();
 
 app.use(httpLogger);
-app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') || true, credentials: true }));
+
+// Fail-closed CORS: unless CORS_ORIGIN is explicitly configured we send NO cross-origin headers, so
+// browsers block any cross-origin read of the API. Never reflect arbitrary origins with credentials.
+const corsOrigins = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
+app.use(cors({ origin: corsOrigins.length > 0 ? corsOrigins : false, credentials: true }));
+
+// Security headers — best effort parity with helmet (no extra dependency). A CSP for the SPA itself
+// is set in the dashboard's index.html (the API returns JSON only).
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('X-XSS-Protection', '0'); // legacy filter off — rely on CSP + headers
+  next();
+});
+
 app.use(express.json({ limit: '1mb' }));
 // General abuse protection (100 req / 15 min) — skip health
 app.use('/api', generalLimiter);
@@ -42,7 +59,6 @@ app.get('/health', async (req, res) => {
       ok: false,
       status: 'unhealthy',
       message: 'Database health check failed',
-      error: error.message,
       timestamp: new Date().toISOString(),
     });
   }
@@ -63,7 +79,7 @@ app.get('/health/ready', async (req, res) => {
   } catch (error) {
     logger.error({ err: error.message }, 'Readiness check failed');
     alertError('readiness_failed', error);
-    res.status(503).json({ ok: false, status: 'not_ready', error: error.message, timestamp: new Date().toISOString() });
+    res.status(503).json({ ok: false, status: 'not_ready', message: 'Service not ready', timestamp: new Date().toISOString() });
   }
 });
 
@@ -77,7 +93,7 @@ app.get('/health/db', async (req, res) => {
   } catch (error) {
     logger.error({ err: error.message, latencyMs: Date.now() - start }, 'DB health check failed');
     alertError('db_health_failed', error);
-    res.status(503).json({ ok: false, status: 'unhealthy', latencyMs: Date.now() - start, error: error.message, timestamp: new Date().toISOString() });
+    res.status(503).json({ ok: false, status: 'unhealthy', latencyMs: Date.now() - start, message: 'Database health check failed', timestamp: new Date().toISOString() });
   }
 });
 
@@ -87,9 +103,9 @@ app.use('/api/tenants', tenantRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
-app.use('/api/mpesa', mpesaRoutes);
 app.use('/api/payment-channels', channelRoutes);
 app.use('/api/reconciliation', reconciliationRoutes);
+app.use('/api/reports', reportRoutes);
 app.use('/api/cron', cronRoutes);
 // PayHero incoming payments — the webhook is not behind /api so it does not hit generalLimiter
 app.use('/webhooks/payhero', payheroWebhookRoutes);

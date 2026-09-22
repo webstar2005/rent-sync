@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -38,7 +39,8 @@ router.get('/', async (req, res) => {
 
     return res.json(result.rows);
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch maintenance requests', error: error.message });
+    logger.error({ err: error.message }, 'Failed to fetch maintenance requests');
+    return res.status(500).json({ message: 'Failed to fetch maintenance requests' });
   }
 });
 
@@ -79,7 +81,8 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: error.errors[0].message });
     }
 
-    return res.status(500).json({ message: 'Failed to create maintenance request', error: error.message });
+    logger.error({ err: error.message }, 'Failed to create maintenance request');
+    return res.status(500).json({ message: 'Failed to create maintenance request' });
   }
 });
 
@@ -125,7 +128,8 @@ router.patch('/:maintenanceId', async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ message: error.errors[0].message });
     }
-    return res.status(500).json({ message: 'Failed to update maintenance request', error: error.message });
+    logger.error({ err: error.message }, 'Failed to update maintenance request');
+    return res.status(500).json({ message: 'Failed to update maintenance request' });
   }
 });
 
@@ -142,7 +146,8 @@ router.delete('/:maintenanceId', async (req, res) => {
     await query('DELETE FROM maintenance_requests WHERE id=$1', [maintenanceId]);
     return res.status(204).send();
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to delete maintenance request', error: error.message });
+    logger.error({ err: error.message }, 'Failed to delete maintenance request');
+    return res.status(500).json({ message: 'Failed to delete maintenance request' });
   }
 });
 

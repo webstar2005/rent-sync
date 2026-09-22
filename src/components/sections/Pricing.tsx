@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { Check } from "lucide-react";
 import { pricingTiers } from "@/content/pricing";
+import { siteConfig } from "@/content/site";
 import { cn } from "@/lib/utils";
 
 export function Pricing() {
@@ -58,8 +58,8 @@ export function Pricing() {
                 ))}
               </ul>
 
-              <Link
-                href="/contact"
+              <a
+                href={siteConfig.appUrl}
                 className={cn(
                   "mt-8 inline-flex h-11 items-center justify-center rounded-full text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
                   isActive
@@ -68,14 +68,14 @@ export function Pricing() {
                 )}
               >
                 {tier.ctaLabel}
-              </Link>
+              </a>
             </div>
             );
           })}
         </div>
 
         <p className="mt-8 text-center text-small text-gray-500">
-          Need 150+ units? <Link href="/contact" className="font-medium text-burgundy-600 hover:text-burgundy-700 underline-offset-4 hover:underline">Contact sales</Link> for custom pricing.
+          Need 150+ units? Manage a growing portfolio — <a href={siteConfig.appUrl} className="font-medium text-burgundy-600 hover:text-burgundy-700 underline-offset-4 hover:underline">get started</a>.
         </p>
       </div>
     </section>

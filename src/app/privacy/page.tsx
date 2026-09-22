@@ -4,11 +4,11 @@ import { Footer } from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
   title: "Privacy Policy — Rent Sync",
-  description: "How Rent Sync handles the personal information we collect from leads, tenants, and property teams.",
+  description: "How Rent Sync handles the personal information we collect from visitors, tenants, and property teams.",
   alternates: { canonical: "/privacy" },
   openGraph: {
     title: "Privacy Policy — Rent Sync",
-    description: "How Rent Sync handles the personal information we collect from leads, tenants, and property teams.",
+    description: "How Rent Sync handles the personal information we collect from visitors, tenants, and property teams.",
     url: "/privacy",
     type: "website",
     images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Rent Sync Privacy" }],
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Privacy Policy — Rent Sync",
-    description: "How Rent Sync handles the personal information we collect from leads, tenants, and property teams.",
+    description: "How Rent Sync handles the personal information we collect from visitors, tenants, and property teams.",
     images: ["/opengraph-image"],
   },
   robots: { index: false, follow: true },
@@ -37,7 +37,7 @@ export default function PrivacyPage() {
           <div className="prose prose-neutral mt-10 max-w-none text-body text-gray-900">
             <h2 className="font-heading text-h3 text-ink">What information we collect</h2>
             <p className="text-body text-gray-500">
-              We collect information you provide directly to us, including your name, email address, phone number, company or property details, and any notes you include in a demo or contact form. We may also collect usage information about how visitors interact with our website to help improve the experience.
+              We collect information you provide directly to us — for example, your name, email address, and company or property details during onboarding. We may also collect usage information about how visitors interact with our website to help improve the experience.
             </p>
             <h2 className="mt-8 font-heading text-h3 text-ink">How we use it</h2>
             <p className="text-body text-gray-500">
@@ -49,11 +49,7 @@ export default function PrivacyPage() {
             </p>
             <h2 className="mt-8 font-heading text-h3 text-ink">Your rights</h2>
             <p className="text-body text-gray-500">
-              You may request access to, correction of, or deletion of your personal information, and you may opt out of marketing communications at any time. To exercise these rights, contact us using the details below.
-            </p>
-            <h2 className="mt-8 font-heading text-h3 text-ink">Contact</h2>
-            <p className="text-body text-gray-500">
-              Questions: <a href="mailto:hello@rentsync.co.ke" className="text-burgundy-600 hover:text-burgundy-700 underline-offset-4 hover:underline">hello@rentsync.co.ke</a>.
+              You may request access to, correction of, or deletion of your personal information, and you may opt out of marketing communications at any time. To exercise these rights, get in touch through the Rent Sync dashboard.
             </p>
           </div>
         </div>

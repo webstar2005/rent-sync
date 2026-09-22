@@ -1,57 +1,44 @@
 import express from 'express';
-import { query } from '../config/db.js';
-import { sendSms, smsTemplates } from '../services/sms.js';
+import crypto from 'node:crypto';
+import { generateMonthlyInvoices, markOverdueInvoices } from '../services/invoiceService.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
-// Simple protection: require CRON_SECRET header if set, otherwise require auth is not needed for this internal job
-// For now, check for x-cron-secret header matching CRON_SECRET, or allow if not set (dev)
+// This endpoint runs platform-wide financial writes (invoices + overdue marking), so it is ALWAYS
+// protected: fail closed if CRON_SECRET is not set, accept the secret only via a header, and compare
+// in constant time. The query string is never used (secrets in URLs leak into logs).
 function requireCronSecret(req, res, next) {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return next(); // no secret set = open in dev
-  const provided = req.headers['x-cron-secret'] || req.headers['x_cron_secret'] || req.query.secret;
-  if (provided !== secret) return res.status(401).json({ message: 'Invalid cron secret' });
+  if (!secret) {
+    return res.status(503).json({ message: 'CRON_SECRET is not configured — cron is disabled' });
+  }
+  const provided = req.headers['x-cron-secret'];
+  if (typeof provided !== 'string' || provided.length === 0) {
+    return res.status(401).json({ message: 'Missing cron secret header' });
+  }
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(401).json({ message: 'Invalid cron secret' });
+  }
   next();
 }
 
-// POST /api/cron/reminders — find pending/overdue invoices and send reminders
-// Can be triggered via pg_cron, GitHub Actions, or external scheduler
-router.post('/reminders', requireCronSecret, async (req, res) => {
+// POST /api/cron/invoices — generate next month's rent invoices for ALL active tenants (whole
+// platform) and flip unpaid pending invoices past their due date to overdue. No SMS. Meant to run
+// once a month (e.g. pg_cron / GitHub Actions / external scheduler).
+router.post('/invoices', requireCronSecret, async (req, res) => {
   try {
-    // Find invoices pending/overdue where due_date is within 3 days upcoming or past due (overdue)
-    const result = await query(
-      `SELECT i.id, i.amount, i.due_date, i.status, t.name as tenant_name, t.phone, p.name as property_name
-       FROM invoices i
-       JOIN tenants t ON t.id = i.tenant_id
-       JOIN properties p ON p.id = i.property_id
-       WHERE i.status IN ('pending','partial','overdue')
-         AND t.phone IS NOT NULL
-         AND t.status = 'active'
-         AND i.due_date <= CURRENT_DATE + INTERVAL '3 days'
-       LIMIT 100`
-    );
-
-    let sent = 0;
-    let skipped = 0;
-    for (const inv of result.rows) {
-      try {
-        if (!inv.phone) { skipped++; continue; }
-        const msg = smsTemplates().overdueReminder(inv.tenant_name, inv.amount, new Date(inv.due_date).toLocaleDateString());
-        await sendSms({ to: inv.phone, message: msg });
-        sent++;
-        // Optional: log to reconciliation or separate table — for now just log
-        logger.info({ tenant: inv.tenant_name, property: inv.property_name, due: inv.due_date }, 'Overdue reminder sent');
-      } catch (e) {
-        logger.warn({ err: e.message, tenant: inv.tenant_name }, 'Reminder SMS failed');
-        skipped++;
-      }
-    }
-
-    return res.json({ ok: true, checked: result.rows.length, sent, skipped });
+    const month = req.body?.month;
+    const [generated, overdue] = await Promise.all([
+      generateMonthlyInvoices({ month }),
+      markOverdueInvoices(),
+    ]);
+    return res.json({ ok: true, ...generated, overdue_marked: overdue.marked });
   } catch (error) {
-    logger.error({ err: error.message }, 'Reminder cron failed');
-    return res.status(500).json({ message: 'Reminder job failed', error: error.message });
+    logger.error({ err: error.message }, 'Invoice cron failed');
+    return res.status(500).json({ message: 'Invoice job failed' });
   }
 });
 

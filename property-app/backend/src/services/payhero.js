@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { logger } from '../utils/logger.js';
 
 // PayHero API client (docs.payhero.co.ke — verified against their current docs).
@@ -146,30 +147,27 @@ export function lowBalanceThreshold() {
 // ---- Webhook verification ----
 // PayHero's documented payment callback carries no signature, so there is no channel signature to
 // verify against (confirmed in their current docs). We secure the endpoint ourselves:
-//   1. shared secret — expected in `x-payhero-secret` header or `?secret=` query (append it to the
-//      callback URL you give PayHero). Fails CLOSED in production if PAYHERO_WEBHOOK_SECRET is unset.
-//   2. optional IP allowlist via PAYHERO_IP_ALLOWLIST (like the old Safaricom check).
+//   1. shared secret — expected ONLY in the `x-payhero-secret` header (never a query string, which
+//      would leak into URL logs). Compare in constant time. Fails CLOSED in every environment when
+//      PAYHERO_WEBHOOK_SECRET is unset or the header is missing/incorrect.
+//   2. optional IP allowlist via PAYHERO_IP_ALLOWLIST (loose check loosened: exact/CIDR match only).
 export function clientIp(req) {
-  return String(req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '').replace(/^::ffff:/, '');
+  // No `trust proxy` is configured, so req.ip is the real socket address — never trust x-forwarded-for
+  // (a plain client can spoof it, and we must not let that bypass a static allowlist).
+  return String(req.ip || '');
 }
 
 export function isAuthorizedWebhook(req) {
-  const secret = process.env.PAYHERO_WEBHOOK_SECRET || '';
-  const ipAllow = process.env.PAYHERO_IP_ALLOWLIST || '';
+  const secret = process.env.PAYHERO_WEBHOOK_SECRET;
+  const provided = req.headers['x-payhero-secret'];
 
-  const headerSecret = req.headers['x-payhero-secret'];
-  const querySecret = typeof req.query?.secret === 'string' ? req.query.secret : null;
-  const provided = headerSecret ?? querySecret ?? null;
+  if (!secret || typeof provided !== 'string' || provided.length === 0) return false;
 
-  if (secret) {
-    if (provided !== secret) return false;
-    // even with a valid secret, optionally enforce the allowlist if configured
-    return ipAllow ? isIpAllowed(req) : true;
-  }
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
 
-  if (process.env.NODE_ENV === 'production') return false; // fail closed
-
-  logger.warn('PAYHERO_WEBHOOK_SECRET not set — accepting PayHero webhook without signature check (non-production only)');
+  const ipAllow = process.env.PAYHERO_IP_ALLOWLIST;
   return ipAllow ? isIpAllowed(req) : true;
 }
 
@@ -177,8 +175,24 @@ function isIpAllowed(req) {
   const allow = process.env.PAYHERO_IP_ALLOWLIST;
   if (!allow) return true;
   const ip = clientIp(req);
+  if (!ip) return false;
   const allowed = allow.split(',').map((s) => s.trim()).filter(Boolean);
-  return allowed.some((a) => ip.includes(a) || ip === a);
+  return allowed.some((a) => (a.includes('/') ? ipInCidr(ip, a) : ip === a));
+}
+
+function ipInCidr(ip, cidr) {
+  const [base, bitsStr] = cidr.split('/');
+  const bits = Number(bitsStr);
+  if (!base || !Number.isInteger(bits) || bits < 0 || bits > 32) return false;
+  const toInt = (parts) =>
+    parts.length === 4 && parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255)
+      ? ((((parts[0] << 24) + (parts[1] << 16) + (parts[2] << 8) + parts[3]) >>> 0))
+      : null;
+  const ipInt = toInt(ip.split('.'));
+  const baseInt = toInt(base.split('.'));
+  if (ipInt === null || baseInt === null) return false;
+  const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+  return (ipInt & mask) === (baseInt & mask);
 }
 
 // ---- Callback payload helpers ----

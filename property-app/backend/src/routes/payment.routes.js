@@ -1,14 +1,15 @@
 import express from 'express';
 import { z } from 'zod';
-import { query } from '../config/db.js';
+import { query, withTransaction } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
 const paymentSchema = z.object({
-  invoice_id: z.number().int(),
-  tenant_id: z.number().int(),
-  amount: z.number().min(0),
+  invoice_id: z.number().int().positive(),
+  tenant_id: z.number().int().positive(),
+  amount: z.number().positive(), // zero/negative payments are never valid
   payment_method: z.enum(['bank_transfer', 'mobile_money', 'cash', 'card', 'other']).default('bank_transfer'),
   reference: z.string().optional(),
   status: z.enum(['pending', 'completed', 'failed', 'refunded']).default('completed'),
@@ -31,7 +32,8 @@ router.get('/', async (req, res) => {
 
     return res.json(result.rows);
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch payments', error: error.message });
+    logger.error({ err: error.message }, 'Failed to fetch payments');
+    return res.status(500).json({ message: 'Failed to fetch payments' });
   }
 });
 
@@ -39,66 +41,69 @@ router.post('/', async (req, res) => {
   try {
     const payload = paymentSchema.parse(req.body);
 
-    const invoiceCheck = await query(
-      `SELECT i.id, i.amount, i.status
-       FROM invoices i
-       JOIN properties p ON p.id = i.property_id
-       WHERE i.id = $1 AND p.owner_id = $2`,
-      [payload.invoice_id, req.user.sub]
-    );
-
-    if (invoiceCheck.rows.length === 0) {
-      return res.status(403).json({ message: 'You do not own this invoice' });
-    }
-
-    const invoice = invoiceCheck.rows[0];
-    const paymentStatus = payload.status;
-
-    const result = await query(
-      `INSERT INTO payments (invoice_id, tenant_id, amount, payment_method, reference, status, paid_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
-       RETURNING *`,
-      [payload.invoice_id, payload.tenant_id, payload.amount, payload.payment_method, payload.reference ?? null, paymentStatus]
-    );
-
-    const payment = result.rows[0];
-
-    if (paymentStatus === 'completed' || paymentStatus === 'pending' || paymentStatus === 'refunded') {
-      const totals = await query(
-        `SELECT COALESCE(SUM(amount), 0) AS total_paid
-         FROM payments
-         WHERE invoice_id = $1 AND status = 'completed'`,
-        [payload.invoice_id]
+    // All reads + writes commit atomically so a payment and its invoice-status transition can never
+    // diverge. The invoice, its ownership, and that the tenant belongs to the SAME property are all
+    // verified; owner_id is stamped from the caller (never fabricated or NULL).
+    const result = await withTransaction(async (client) => {
+      const invoiceRes = await client.query(
+        `SELECT i.id, i.amount, i.status, i.property_id
+         FROM invoices i
+         JOIN properties p ON p.id = i.property_id
+         WHERE i.id = $1 AND p.owner_id = $2`,
+        [payload.invoice_id, req.user.sub]
       );
 
-      const totalPaid = Number(totals.rows[0].total_paid ?? 0);
-      const invoiceAmount = Number(invoice.amount);
+      if (invoiceRes.rows.length === 0) return { code: 'forbidden' };
+      const invoice = invoiceRes.rows[0];
+      if (invoice.status === 'cancelled') return { code: 'cancelled' };
 
-      let nextInvoiceStatus = 'pending';
-      if (totalPaid >= invoiceAmount) {
-        nextInvoiceStatus = 'paid';
-      } else if (totalPaid > 0) {
-        nextInvoiceStatus = 'partial';
+      const tenantRes = await client.query(
+        `SELECT id FROM tenants WHERE id = $1 AND property_id = $2`,
+        [payload.tenant_id, invoice.property_id]
+      );
+      if (tenantRes.rows.length === 0) return { code: 'tenant-mismatch' };
+
+      const created = await client.query(
+        `INSERT INTO payments (invoice_id, tenant_id, owner_id, amount, payment_method, reference, status, paid_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+         RETURNING *`,
+        [payload.invoice_id, payload.tenant_id, req.user.sub, payload.amount, payload.payment_method, payload.reference ?? null, payload.status]
+      );
+      const payment = created.rows[0];
+
+      let invoiceStatus = invoice.status;
+      if (payload.status === 'completed') {
+        const totals = await client.query(
+          `SELECT COALESCE(SUM(amount), 0)::numeric AS total_paid
+           FROM payments
+           WHERE invoice_id = $1 AND status = 'completed'`,
+          [payload.invoice_id]
+        );
+
+        const totalPaid = Number(totals.rows[0].total_paid ?? 0);
+        const invoiceAmount = Number(invoice.amount);
+        invoiceStatus = totalPaid >= invoiceAmount ? 'paid' : totalPaid > 0 ? 'partial' : 'pending';
+
+        await client.query(
+          `UPDATE invoices SET status = $1, updated_at = NOW() WHERE id = $2`,
+          [invoiceStatus, payload.invoice_id]
+        );
       }
 
-      await query(
-        `UPDATE invoices
-         SET status = $1,
-             updated_at = NOW()
-         WHERE id = $2`,
-        [nextInvoiceStatus, payload.invoice_id]
-      );
+      return { code: 'ok', payment: { ...payment, invoice_status: invoiceStatus } };
+    });
 
-      payment.invoice_status = nextInvoiceStatus;
-    }
-
-    return res.status(201).json(payment);
+    if (result.code === 'forbidden') return res.status(403).json({ message: 'You do not own this invoice' });
+    if (result.code === 'cancelled') return res.status(409).json({ message: 'This invoice is cancelled and cannot receive payments' });
+    if (result.code === 'tenant-mismatch') return res.status(403).json({ message: 'Tenant does not belong to this invoice' });
+    return res.status(201).json(result.payment);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ message: error.errors[0].message });
     }
 
-    return res.status(500).json({ message: 'Failed to record payment', error: error.message });
+    logger.error({ err: error.message }, 'Failed to record payment');
+    return res.status(500).json({ message: 'Failed to record payment' });
   }
 });
 

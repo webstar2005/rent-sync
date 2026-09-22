@@ -38,7 +38,5 @@ export type SiteConfig = {
   tagline: string;
   navLinks: { label: string; href: string }[];
   stats?: { label: string; value: string }[];
-  contact: { email: string; phone?: string; address?: string };
-  social?: { label: string; href: string }[];
   appUrl?: string;
 };

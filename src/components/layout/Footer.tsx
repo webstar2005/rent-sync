@@ -43,20 +43,6 @@ export function Footer() {
               <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
               <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
             </ul>
-            {siteConfig.social && siteConfig.social.length > 0 && (
-              <div className="mt-8">
-                <p className="font-heading text-sm font-semibold uppercase tracking-widest text-white">Follow</p>
-                <ul className="mt-3 flex gap-4 text-small">
-                  {siteConfig.social.map((s) => (
-                    <li key={s.label}>
-                      <a href={s.href} className="hover:text-white transition-colors underline-offset-4 hover:underline">
-                        {s.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         </div>
 

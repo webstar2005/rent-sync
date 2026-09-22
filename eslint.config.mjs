@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Nested workspace with its own linting (oxlint + backend tests).
+    "property-app/**",
   ]),
 ]);
 
