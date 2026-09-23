@@ -26,21 +26,25 @@ else is free. All secrets stay out of git (see Security notes at the end).
 1. Sign up at neon.tech (GitHub sign-in fine, no card). Create a project (region: closest to you).
 2. Copy the **direct** (`-db.`) connection string — for a long-lived Express `pg` pool use the
    direct one, not the `-pooler` one.
-3. Apply the schema + migrations **before** first deploy (the app does NOT auto-migrate in prod —
-   this matches `src/config/env.js` / `test/helpers.js`). On a fresh DB, `schema.sql` FIRST, then
-   every migration file in (lexicographic) order — all migrations are re-runnable/idempotent.
-   Do **not** run `seed.sql` in production.
-
-PowerShell (from the repo root), Postgres client `psql` required:
+3. Paste it into the gitignored `property-app/backend/.env.production`:
+   `DATABASE_URL=postgresql://user:pass@ep-xxx-db.neon.tech/neondb?sslmode=require`
+4. Apply the schema + migrations **before** first deploy with the included runner (no `psql`
+   needed — it uses the backend's `pg` package and mirrors `test/helpers.js`):
 
 ```powershell
-psql "<NEON_DIRECT_DATABASE_URL>" -f property-app\backend\database\schema.sql
-Get-ChildItem property-app\backend\database\migrations\*.sql |
-  Sort-Object Name |
-  ForEach-Object { psql "<NEON_DIRECT_DATABASE_URL>" -f $_.FullName }
+cd property-app\backend
+node scripts/apply-migrations.js
 ```
 
-Verify: `psql "<URL>" -c "select count(*) from users;"` returns 0.
+It runs `schema.sql` first (it is NOT idempotent — only on a fresh DB), then every migration in
+order (all re-runnable). It never runs `seed.sql` (dev sample data). Success looks like:
+
+```
+applied schema.sql
+applied 002_hardening_indexes_and_due_date.sql
+...
+Schema + migrations applied successfully.
+```
 
 ## 2. Render — the API (the $7/mo piece)
 
