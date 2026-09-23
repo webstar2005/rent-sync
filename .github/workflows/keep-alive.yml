@@ -1,0 +1,33 @@
+# Keeps the free-tier Render API awake (free web services spin down after 15 min idle) by
+# pinging /health every 5 minutes. /health is DB-backed, so this also warms the Neon database.
+# Backup to an UptimeRobot monitor so there is redundancy, and REMOVE this once the service is
+# on Render Starter (paid — no spin-down, and a kept-awake free service burns nearly the whole
+# 750 instance-hours/month allowance).
+#
+# Notes:
+# - GitHub disables scheduled workflows after ~60 days with no repo activity; push any commit to re-enable.
+# - A failed ping (non-200) turns the run red so a broken deploy is visible.
+
+name: Keep Alive
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render health endpoint
+        env:
+          RENDER_API_URL: ${{ vars.RENDER_API_URL }}
+        run: |
+          url="${RENDER_API_URL:-https://rentsync-api.onrender.com}/health"
+          echo "Pinging $url"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$url" || echo 000)
+          echo "health returned: $code"
+          if [ "$code" != "200" ] && [ "$code" != "204" ]; then
+            echo "::error::API health check failed with HTTP $code"
+            exit 1
+          fi

@@ -83,6 +83,20 @@ Generate secrets on Windows:
 4. **Upgrade to Starter ($7/mo)** in the service's Settings → Instance Type. This removes spin-down —
   the PayHero webhook will always get an instant response.
 
+#### Keep-alive (only while on the free instance type)
+
+Free web services spin down after 15 min idle and cold-start (30–60 s) on the next hit — risky for
+PayHero webhooks. Keep it warm with BOTH:
+
+- **UptimeRobot** (free): HTTP monitor on `https://your-api.onrender.com/health`, interval 5 min.
+  `/health` is DB-backed, so it keeps Neon warm too.
+- **`.github/workflows/keep-alive.yml`** (in this repo): pings every 5 min as a backup. Remove
+  both once the service is on Starter.
+
+Caveat: a kept-awake free service consumes ~730 of the monthly 750 instance-hours, so do NOT add a
+second free web service while on the free tier, and upgrade to Starter before real tenant payment
+volume flows.
+
 ## 3. Cloudflare Pages — marketing site
 
 1. New **Pages** project → connect the repo.
