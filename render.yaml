@@ -1,0 +1,43 @@
+# Rent Sync — Express backend deploy config for Render (Blueprint spec).
+# rootDir lets Render build only property-app/backend inside this monorepo.
+#
+# How to use:
+#   1. In Render: New + -> Blueprint -> select this GitHub repo.
+#   2. Render prompts for the `sync: false` secrets below (set them there, never in git).
+#   3. Pick Node runtime version 22 when creating the service.
+#   4. Verify on the free instance first, then flip the service's Settings -> Instance Type
+#      to Starter ($7/mo) so PayHero webhooks never wait on a cold start.
+#
+# Database: point DATABASE_URL at the Neon Postgres DIRECT connection string (not the -pooler one)
+# and apply property-app/backend/database/schema.sql + migrations manually BEFORE first deploy
+# (the app does NOT auto-migrate in production). See docs/DEPLOY-RENDER-CLOUDFLARE-NEON.md.
+
+services:
+  - type: web
+    name: rentsync-api
+    runtime: node
+    rootDir: property-app/backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: CORS_ORIGIN
+        # Fail-closed CORS: only the deployed dashboard is allowed. Add more origins comma-separated.
+        value: https://app.rentsync.africa
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false # >= 32 chars (openssl rand -hex 32)
+      - key: CRON_SECRET
+        sync: false # >= 16 chars
+      - key: PAYHERO_WEBHOOK_SECRET
+        sync: false # >= 16 chars, matches x-payhero-webhook-secret / ?secret=
+      - key: PAYHERO_AUTH_TOKEN
+        sync: false # PayHero portal -> API Keys
+      - key: PAYHERO_ACCOUNT_ID
+        sync: false # PayHero profile page
