@@ -26,6 +26,7 @@ type Mode = 'login' | 'register';
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('login');
+  const [gsiReady, setGsiReady] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -118,20 +119,31 @@ export default function App() {
 
   useEffect(() => {
     const scriptId = 'google-gsi';
-    const existingScript = document.getElementById(scriptId);
+    const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+    const markReady = () => setGsiReady(true);
 
-    if (!existingScript) {
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      document.body.appendChild(script);
+    if (existingScript) {
+      if (window.google?.accounts?.id) {
+        markReady();
+      } else {
+        existingScript.addEventListener('load', markReady);
+      }
+      return () => existingScript.removeEventListener('load', markReady);
     }
+
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.addEventListener('load', markReady);
+    document.body.appendChild(script);
+
+    return () => script.removeEventListener('load', markReady);
   }, []);
 
   useEffect(() => {
-    if (mode !== 'login' || !window.google?.accounts?.id || !import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+    if (mode !== 'login' || !gsiReady || !window.google?.accounts?.id || !import.meta.env.VITE_GOOGLE_CLIENT_ID) {
       return;
     }
 
@@ -146,6 +158,7 @@ export default function App() {
       callback: handleGoogleCredentialResponse,
     });
 
+    container.innerHTML = '';
     googleId.renderButton(container, {
       theme: 'outline',
       size: 'large',
@@ -153,7 +166,7 @@ export default function App() {
       shape: 'pill',
       logo_alignment: 'left',
     });
-  }, [mode]);
+  }, [mode, gsiReady]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('property_app_user');
