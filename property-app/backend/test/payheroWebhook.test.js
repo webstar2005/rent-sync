@@ -240,17 +240,30 @@ describe('PayHero Send Money → landlord receiving number', () => {
 
   it('does not mistake the sender phone for the recipient when the callback omits the receiver', async () => {
     const a = await seedLandlord({ name: 'Amos' });
-    await seedChannel(a.user.id, { channel_type: 'send_money', short_code: '712345678' });
+    const prop = await seedProperty(a.user.id, { name: 'A Complex' });
+    // Adversarial: the tenant paying is on the very number stored as the Send Money channel.
+    const tenant = await seedTenant(prop.id, { name: 'Alice', phone: '0712345678', unit_number: 'AA1' });
+    await seedInvoice(tenant.id, prop.id, { invoice_number: 'INV-A1', amount: 10000 });
+    const chan = await seedChannel(a.user.id, { channel_type: 'send_money', short_code: '712345678' });
 
-    // `Phone` here is the tenant paying. With no receiver field the callback must NOT be attributed to
-    // the Send Money channel — a wrong-owner match is worse than a flagged unmatched payment.
-    const cb = callbackBody({ amount: 5000, reference: 'NO-SUCH-INVOICE', phone: '+254712345678' });
+    // No receiver field in the callback, and `Phone` (the sender) equals the channel's number. The
+    // channel must NOT be matched from the sender — but the money must still be recorded against the
+    // resolvable owner/tenant and flagged for manual review, rather than silently dropped.
+    const cb = callbackBody({ amount: 10000, reference: 'INV-A1', phone: '+254712345678' });
     const res = await postWebhook(cb.body).expect(200);
     assert.equal(res.body.result, 'unmatched_tenant');
+    assert.equal(res.body.ownerId, a.user.id);
 
     const pay = await pool.query('SELECT * FROM payments WHERE transaction_ref = $1', [cb.receipt]);
     assert.equal(pay.rows.length, 1, 'money is still never dropped');
     assert.equal(pay.rows[0].payment_channel_id, null, 'sender phone must not resolve a Send Money channel');
+    assert.notEqual(pay.rows[0].payment_channel_id, chan.id);
+    assert.equal(pay.rows[0].tenant_id, tenant.id);
+    assert.equal(pay.rows[0].matched, false);
+
+    const ev = await pool.query('SELECT * FROM payment_reconciliation_events WHERE transaction_ref = $1', [cb.receipt]);
+    assert.equal(ev.rows.length, 1);
+    assert.equal(ev.rows[0].match_status, 'manual_review');
   });
 
   it('flags an ambiguous receiving number shared by two landlords instead of guessing', async () => {
