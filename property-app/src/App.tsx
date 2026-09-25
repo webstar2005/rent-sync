@@ -666,14 +666,14 @@ export default function App() {
             <button
               type="button"
               onClick={() => setMode('login')}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${mode === 'login' ? 'bg-[#7A1428] text-white shadow-sm' : 'text-[#C9C0C4] hover:bg-[#221C1E]'}`}
+              className={`no-scale flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${mode === 'login' ? 'bg-[#7A1428] text-white shadow-sm' : 'text-[#C9C0C4] hover:bg-[#221C1E]'}`}
             >
               Login
             </button>
             <button
               type="button"
               onClick={() => setMode('register')}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${mode === 'register' ? 'bg-[#7A1428] text-white shadow-sm' : 'text-[#C9C0C4] hover:bg-[#221C1E]'}`}
+              className={`no-scale flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${mode === 'register' ? 'bg-[#7A1428] text-white shadow-sm' : 'text-[#C9C0C4] hover:bg-[#221C1E]'}`}
             >
               Register
             </button>
@@ -917,7 +917,7 @@ export default function App() {
   const selectedTenantSummary = selectedTenant ? getTenantRentStatus(selectedTenant) : null;
 
   return (
-    <div className="dashboard-root min-h-screen bg-[#0D0A0B] px-4 py-8 text-[#F6F2F3]">
+    <div className="min-h-screen bg-[#0D0A0B] px-4 py-8 text-[#F6F2F3]">
       <div className="mx-auto max-w-7xl">
         <header className="mb-8 flex flex-col gap-4 rounded-3xl border border-[#261F22] bg-[#161112] p-6 shadow-[0_18px_45px_rgba(0,0,0,0.5)] md:flex-row md:items-center md:justify-between">
           <div>
@@ -1096,8 +1096,8 @@ export default function App() {
                         </div>
                         {propertyErrors.units && <p className="text-xs text-[#F47C8E]">{propertyErrors.units}</p>}
                         <div className="flex gap-2">
-                          <button type="submit" disabled={loading} className="flex-1 rounded-lg bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Save</button>
-                          <button type="button" onClick={() => { setEditingPropertyId(null); setPropertyErrors({}); }} className="flex-1 rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm">Cancel</button>
+                          <button type="submit" disabled={loading} className="no-scale flex-1 rounded-lg bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Save</button>
+                          <button type="button" onClick={() => { setEditingPropertyId(null); setPropertyErrors({}); }} className="no-scale flex-1 rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm">Cancel</button>
                         </div>
                       </form>
                     )}
