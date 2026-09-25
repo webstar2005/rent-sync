@@ -50,6 +50,7 @@ export default function App() {
     email: '',
     password: '',
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [propertyForm, setPropertyForm] = useState({
     name: '',
     address: '',
@@ -705,13 +706,38 @@ export default function App() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Password</label>
-              <input
-                type="password"
-                value={authForm.password}
-                onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
-                className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
-                placeholder="••••••••"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={authForm.password}
+                  onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
+                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 pr-11"
+                  placeholder={showPassword ? 'Your password' : '••••••••'}
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((shown) => !shown)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-[#8A7F83] transition-colors hover:text-[#C9C0C4] focus:outline-none focus-visible:text-[#C65A70]"
+                >
+                  {showPassword ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden="true">
+                      <path d="M3 3l18 18" />
+                      <path d="M10.6 5.2A9.7 9.7 0 0112 5c5 0 9 4.5 9 7a12.6 12.6 0 01-2.2 3.2" />
+                      <path d="M6.6 6.6A12.6 12.6 0 003 12c0 2.5 4 7 9 7a9.6 9.6 0 003.6-.7" />
+                      <path d="M9.9 9.9a3 3 0 004.2 4.2" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden="true">
+                      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
 
             {mode === 'register' && (
