@@ -917,7 +917,7 @@ export default function App() {
   const selectedTenantSummary = selectedTenant ? getTenantRentStatus(selectedTenant) : null;
 
   return (
-    <div className="min-h-screen bg-[#0D0A0B] px-4 py-8 text-[#F6F2F3]">
+    <div className="dashboard-root min-h-screen bg-[#0D0A0B] px-4 py-8 text-[#F6F2F3]">
       <div className="mx-auto max-w-7xl">
         <header className="mb-8 flex flex-col gap-4 rounded-3xl border border-[#261F22] bg-[#161112] p-6 shadow-[0_18px_45px_rgba(0,0,0,0.5)] md:flex-row md:items-center md:justify-between">
           <div>
