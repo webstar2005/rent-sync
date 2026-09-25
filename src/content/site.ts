@@ -8,7 +8,9 @@ export const siteConfig: SiteConfig = {
     { label: "Features", href: "/features" },
     { label: "FAQs", href: "/faqs" },
   ],
-  // Live dashboard URL — dev: Vite on :5173, prod: app.rentsync.co.ke (or your domain)
-  // Change to your deployed property-app URL before handing to landlord
-  appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5173",
+  appUrl:
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.NODE_ENV === "production"
+      ? "https://app.rentsync.africa"
+      : "http://localhost:5173"),
 };
