@@ -745,7 +745,7 @@ export default function App() {
                   <span>or</span>
                   <span className="h-px flex-1 bg-[#2A2225]" />
                 </div>
-                <div className="relative h-11 w-full">
+                <div id="google-signin-wrap" className="relative h-11 w-full">
                   <div
                     id="google-signin-button"
                     className="absolute inset-0 z-10 h-11 w-full opacity-0"

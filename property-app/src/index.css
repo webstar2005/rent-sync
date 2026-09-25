@@ -45,4 +45,9 @@ button:not(:disabled):active {
 button.no-scale:hover, button.no-scale:active {
   transform: none;
 }
+#google-signin-wrap { transition: transform 180ms ease; }
+#google-signin-wrap:hover {
+  z-index: 1;
+  transform: scale(1.06);
+}
 select option { background: #161112; color: #F6F2F3; }
