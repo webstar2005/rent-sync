@@ -246,10 +246,10 @@ router.post('/', payheroWebhookLimiter, async (req, res) => {
     }
 
     // ---- 3. Resolve the landlord FIRST via the channel identifier ----
-    let channelResolution = { channel: null, matchedBy: null };
-    if (channelId || shortCode) {
-      channelResolution = await resolveChannel(rawPayload);
-    }
+    // Always resolve, not only when a channel id/short code is present: Send Money callbacks carry
+    // neither, and are instead identified by the recipient phone. resolveChannel() returns
+    // { channel: null } when nothing matches, which falls through to the strong-identifier fallback.
+    const channelResolution = await resolveChannel(rawPayload);
 
     let ownerId = null;
     let tenantId = null;

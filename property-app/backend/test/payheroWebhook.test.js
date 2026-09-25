@@ -266,6 +266,7 @@ describe('PayHero Send Money → landlord receiving number', () => {
     const log = await pool.query('SELECT * FROM payhero_callback_log ORDER BY id DESC LIMIT 1');
     assert.equal(log.rows[0].status, 'unmatched_channel');
     assert.equal(log.rows[0].alerted, true);
+    assert.match(log.rows[0].processing_error, /more than one active PaymentChannel/i, 'failed on ambiguity, not on finding nothing at all');
 
     const payments = await pool.query('SELECT COUNT(*)::int AS c FROM payments');
     assert.equal(payments.rows[0].c, 0, 'no money attributed to an arbitrary owner');
@@ -278,6 +279,9 @@ describe('PayHero Send Money → landlord receiving number', () => {
     const cb = callbackBody({ amount: 5000, reference: 'INV-OFF', extra: { ReceiverPhone: '254712345678' } });
     const res = await postWebhook(cb.body).expect(200);
     assert.equal(res.body.result, 'unmatched_channel');
+
+    const log = await pool.query('SELECT * FROM payhero_callback_log ORDER BY id DESC LIMIT 1');
+    assert.match(log.rows[0].processing_error, /No registered active PaymentChannel matched/i);
 
     const payments = await pool.query('SELECT COUNT(*)::int AS c FROM payments');
     assert.equal(payments.rows[0].c, 0);
