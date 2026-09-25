@@ -159,11 +159,13 @@ export default function App() {
     });
 
     container.innerHTML = '';
+    const width = Math.max(180, Math.min(400, Math.round(container.getBoundingClientRect().width)));
     googleId.renderButton(container, {
-      theme: 'outline',
+      theme: 'filled_black',
       size: 'large',
+      width,
       text: 'continue_with',
-      shape: 'pill',
+      shape: 'rectangle',
       logo_alignment: 'left',
     });
   }, [mode, gsiReady]);
@@ -744,7 +746,7 @@ export default function App() {
                   <span>or</span>
                   <span className="h-px flex-1 bg-[#2A2225]" />
                 </div>
-                <div id="google-signin-button" className="flex justify-center" />
+                <div id="google-signin-button" className="w-full" />
               </div>
             )}
           </form>
