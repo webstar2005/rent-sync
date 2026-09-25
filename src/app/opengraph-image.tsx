@@ -72,7 +72,7 @@ export default async function Image() {
 
         {/* Bottom */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 14, color: "#6B6B6B" }}>rentsync.co.ke · Start Free</span>
+          <span style={{ fontSize: 14, color: "#6B6B6B" }}>rentsync.africa · Start Free</span>
           <div style={{ display: "flex", gap: 8 }}>
             <div style={{ width: 80, height: 8, borderRadius: 999, background: "#7A1428" }} />
             <div style={{ width: 80, height: 8, borderRadius: 999, background: "#F7E9EB" }} />

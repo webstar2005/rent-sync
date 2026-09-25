@@ -15,7 +15,7 @@ const sora = Sora({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://rentsync.co.ke"),
+  metadataBase: new URL("https://rentsync.africa"),
   title: {
     default: "Rent Sync — Run Your Rental Portfolio Without the Spreadsheet Chaos",
     template: "%s | Rent Sync",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_KE",
-    url: "https://rentsync.co.ke",
+    url: "https://rentsync.africa",
     siteName: "Rent Sync",
     title: "Rent Sync — Run Your Rental Portfolio Without the Spreadsheet Chaos",
     description:
