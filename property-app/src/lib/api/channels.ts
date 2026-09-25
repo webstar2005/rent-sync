@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type ChannelType = 'paybill' | 'till' | 'bank';
+export type ChannelType = 'paybill' | 'till' | 'bank' | 'send_money';
 export type VerificationStatus = 'pending' | 'verified' | 'active' | 'inactive' | 'failed';
 
 export type PaymentChannel = {

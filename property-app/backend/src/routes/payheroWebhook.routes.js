@@ -9,6 +9,7 @@ import {
   extractShortCode,
   extractTransactionRef,
   extractPhone,
+  extractRecipientPhone,
   extractReference,
   normalizePhone,
   normalizeName,
@@ -65,6 +66,22 @@ async function resolveChannel(payload) {
     const rows = await query(`SELECT * FROM payment_channels WHERE short_code = $1 AND is_active = TRUE`, [shortCode]);
     if (rows.rows.length === 1) return { channel: rows.rows[0], matchedBy: 'short_code' };
     if (rows.rows.length > 1) return { ambiguous: true, matchedBy: 'short_code' };
+  }
+
+  // Send Money carries no short code — the landlord is the number the money was sent TO, so match on
+  // the recipient phone against send_money channels whose stored number normalizes to the same 9
+  // digits. Left out, these payments fell through to resolveOwnerWithoutChannel, which matches the
+  // TENANT's phone and so never (or wrongly) attributed a Send Money payment.
+  const recipientPhone = extractRecipientPhone(payload);
+  if (recipientPhone) {
+    const rows = await query(
+      `SELECT * FROM payment_channels
+       WHERE channel_type = 'send_money' AND is_active = TRUE
+         AND RIGHT(regexp_replace(short_code, '[^0-9]', '', 'g'), 9) = $1`,
+      [recipientPhone]
+    );
+    if (rows.rows.length === 1) return { channel: rows.rows[0], matchedBy: 'send_money_phone' };
+    if (rows.rows.length > 1) return { ambiguous: true, matchedBy: 'send_money_phone' };
   }
 
   return { channel: null, matchedBy: null };
