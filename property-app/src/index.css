@@ -37,11 +37,9 @@ input, select, textarea, button { transition: all 180ms ease; }
 .dashboard-root button:not(:disabled):hover {
   position: relative;
   z-index: 1;
-  transform: translateY(-2px) scale(1.03);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+  transform: scale(1.06);
 }
 .dashboard-root button:not(:disabled):active {
-  transform: translateY(0) scale(0.98);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  transform: scale(0.98);
 }
 select option { background: #161112; color: #F6F2F3; }
