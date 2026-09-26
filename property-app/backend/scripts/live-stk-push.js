@@ -7,6 +7,10 @@
 //    PAYHERO_TEST_AMOUNT      — default 1 (KES)
 //    PAYHERO_TEST_CHANNEL_ID  — default 12891 (the bank channel registered earlier)
 //    PAYHERO_TEST_CALLBACK_URL — optional per-request callback (public URL to our webhook)
+//    PAYHERO_TEST_REFERENCE   — RECOMMENDED. A real invoice_number from your dashboard (e.g. INV-3-202610).
+//                               This becomes PayHero's ExternalReference, which is the field our webhook
+//                               correlates on, so passing a real invoice number is what makes the payment
+//                               land against that invoice instead of arriving unmatched.
 import '../src/config/env.js';
 import { initiateStkPush, getTransactionStatus } from '../src/services/payhero.js';
 
@@ -14,16 +18,30 @@ const phone = process.env.PAYHERO_TEST_PHONE;
 const amount = Number(process.env.PAYHERO_TEST_AMOUNT || 1);
 const channelId = Number(process.env.PAYHERO_TEST_CHANNEL_ID || 12891);
 const callbackUrl = process.env.PAYHERO_TEST_CALLBACK_URL || '';
+const requestedReference = process.env.PAYHERO_TEST_REFERENCE || '';
 
 if (!phone) {
   console.error('Set PAYHERO_TEST_PHONE (2547XXXXXXXX) in backend/.env first.');
   process.exit(1);
 }
 
-const externalReference = `INV-${Date.now()}`;
+// Previously this was always `INV-<timestamp>`, which matches no invoice — the payment could only ever
+// arrive unmatched. A unique placeholder is still generated when no real invoice number is supplied, so
+// the script still works as a pure connectivity probe.
+const externalReference = requestedReference || `UNMATCHED-PROBE-${Date.now()}`;
 let pollRef = externalReference;
 
-console.log(`Initiating STK push -> channel ${channelId}, amount ${amount} KES, phone ${phone}`);
+if (requestedReference) {
+  console.log(`Using your real invoice number as ExternalReference: ${externalReference}`);
+  console.log('This payment should be matched to that invoice and mark it paid / partial.');
+} else {
+  console.log('\nWARNING: PAYHERO_TEST_REFERENCE is not set.');
+  console.log('The payment will NOT match any invoice and will be recorded as needing reconciliation.');
+  console.log("Copy an invoice_number from the dashboard's \"Recent invoices\" table and re-run with");
+  console.log('PAYHERO_TEST_REFERENCE set to see the fully-matched path instead.');
+}
+
+console.log(`\nInitiating STK push -> channel ${channelId}, amount ${amount} KES, phone ${phone}`);
 console.log(`external_reference      = ${externalReference}`);
 if (callbackUrl) console.log(`callback_url             = ${callbackUrl}`);
 

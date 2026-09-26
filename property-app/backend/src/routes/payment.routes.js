@@ -19,13 +19,23 @@ router.use(requireAuth);
 
 router.get('/', async (req, res) => {
   try {
+    // LEFT JOINs, and scoping on payments.owner_id rather than through the invoice's property.
+    // payments.invoice_id is NULLABLE by design: the PayHero webhook records a payment even when it
+    // cannot attribute it to an invoice, because unrecorded money is worse than unmatched money. An
+    // INNER JOIN silently dropped exactly those rows, so a landlord's most important case — "a tenant
+    // paid and I cannot see it" — was the one case the dashboard could not show. owner_id is stamped
+    // from the authenticated caller on every write path and is never NULL, so it is a total scope.
     const result = await query(
-      `SELECT p.*, i.invoice_number, t.name AS tenant_name
+      `SELECT p.*,
+              i.invoice_number,
+              t.name AS tenant_name,
+              pc.short_code AS channel_short_code,
+              pc.channel_type AS channel_type
        FROM payments p
-       JOIN invoices i ON i.id = p.invoice_id
-       JOIN tenants t ON t.id = p.tenant_id
-       JOIN properties prop ON prop.id = i.property_id
-       WHERE prop.owner_id = $1
+       LEFT JOIN invoices i ON i.id = p.invoice_id
+       LEFT JOIN tenants t ON t.id = p.tenant_id
+       LEFT JOIN payment_channels pc ON pc.id = p.payment_channel_id
+       WHERE p.owner_id = $1
        ORDER BY p.paid_at DESC`,
       [req.user.sub]
     );

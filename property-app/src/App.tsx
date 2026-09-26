@@ -34,6 +34,8 @@ export default function App() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [maintenance, setMaintenance] = useState<MaintenanceRequest[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState('');
   const [generatingInvoices, setGeneratingInvoices] = useState(false);
   const [invoiceNotice, setInvoiceNotice] = useState('');
@@ -184,6 +186,17 @@ export default function App() {
     }
   }, [isLoggedIn]);
 
+  // Payments arrive by webhook, so a dashboard that only loads on mount shows a landlord a stale page
+  // while they are standing there waiting for a tenant's money to land. Poll quietly so a payment
+  // appears on its own; the Refresh button and "Updated" stamp make the timing visible rather than magic.
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const timer = setInterval(() => {
+      loadProperties(true).then(() => setLastUpdated(new Date())).catch(() => undefined);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [isLoggedIn]);
+
   async function loadProperties(silent = false) {
     try {
       const [propRes, tenantRes, invoiceRes, paymentRes, maintRes, alertsRes, summaryRes] = await Promise.allSettled([
@@ -241,6 +254,16 @@ export default function App() {
         return;
       }
       setError(`Unable to load dashboard data: ${msg}. Please refresh or check backend logs (backend npm run dev).`);
+    }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await loadProperties(true);
+      setLastUpdated(new Date());
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -838,14 +861,27 @@ export default function App() {
 
   // Active dashboard must not be polluted by moved_out/archived history — filter to active only
 
+  // Amount still owed on an invoice = its face value minus what has actually been paid against it.
+  // Summing the FULL amount of every non-paid invoice (the previous behaviour) ignored part-payments,
+  // so the dashboard overstated arrears and contradicted the Reports → arrears table, which nets
+  // payments off correctly. Both figures are now computed the same way.
+  const paidAgainstInvoice = (invoiceId: number) =>
+    payments
+      .filter((payment) => payment.invoice_id === invoiceId && payment.status === 'completed')
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+
+  const outstandingOnInvoice = (invoice: Invoice) =>
+    Math.max(Number(invoice.amount) - paidAgainstInvoice(invoice.id), 0);
+
   // Totals for active tenants only — old records (moved_out/archived) keep history but don't inflate outstanding
   const totalCollected = payments
     .filter((p) => p.status === 'completed' && activeTenants.some((t) => t.id === p.tenant_id))
     .reduce((sum, payment) => sum + Number(payment.amount), 0);
   const totalOutstanding = invoices
     .filter((inv) => inv.status !== 'paid' && activeTenants.some((t) => t.id === inv.tenant_id))
-    .reduce((sum, invoice) => sum + Number(invoice.amount), 0);
+    .reduce((sum, invoice) => sum + outstandingOnInvoice(invoice), 0);
   const recentInvoices = invoices.slice(0, 5);
+  const unmatchedPaymentCount = payments.filter((payment) => payment.matched === false).length;
 
   const propertySummaries = properties
     .map((property) => {
@@ -858,7 +894,7 @@ export default function App() {
         .reduce((sum, payment) => sum + Number(payment.amount), 0);
       const outstandingAmount = propertyInvoices
         .filter((invoice) => invoice.status !== 'paid')
-        .reduce((sum, invoice) => sum + Number(invoice.amount), 0);
+        .reduce((sum, invoice) => sum + outstandingOnInvoice(invoice), 0);
 
       const paidCount = propertyTenants.filter((tenant) => getTenantRentStatus(tenant).status === 'paid').length;
       const partialCount = propertyTenants.filter((tenant) => getTenantRentStatus(tenant).status === 'partial').length;
@@ -951,6 +987,19 @@ export default function App() {
             <h1 className="mt-2 text-3xl font-bold text-[#F6F2F3]">Dashboard</h1>
           </div>
           <div className="flex items-center gap-3">
+            {lastUpdated && (
+              <span className="hidden text-xs text-[#A49DA1] sm:inline">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="rounded-xl border border-[#33282C] bg-[#161112] px-4 py-2 text-sm font-medium text-[#CFC5CA] shadow-sm hover:border-[#7A3B4C] hover:text-[#C65A70] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
             <span className="rounded-full bg-[#2B1A1E] px-3 py-1 text-sm font-semibold text-[#C65A70] shadow-sm">
               {user?.role || 'landlord'}
             </span>
@@ -1297,6 +1346,90 @@ export default function App() {
                       <td className="px-3 py-2">${Number(invoice.amount).toFixed(2)}</td>
                       <td className="px-3 py-2">
                         <span className="rounded-full bg-[#2B2116] px-2.5 py-1 text-xs font-semibold text-[#F0B84B]">{invoice.status}</span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-[#F6F2F3]">Payments received</h2>
+              <p className="mt-1 text-xs text-[#A49DA1]">
+                Every payment recorded against your properties, newest first. Payments that could not be
+                matched to an invoice are listed here too and flagged for reconciliation — nothing received
+                is ever hidden.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {unmatchedPaymentCount > 0 && (
+                <span className="rounded-full bg-[#3A1414] px-2.5 py-1 text-xs font-semibold text-[#F08A8A]">
+                  {unmatchedPaymentCount} needing reconciliation
+                </span>
+              )}
+              <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">
+                {payments.length} total
+              </span>
+            </div>
+          </div>
+          <div className="mt-4 overflow-x-auto rounded-2xl border border-[#2C2326]">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-[#221C1E] text-[#B5ABB0]">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Received</th>
+                  <th className="px-3 py-2 font-medium">Tenant</th>
+                  <th className="px-3 py-2 font-medium">Invoice</th>
+                  <th className="px-3 py-2 font-medium">Amount</th>
+                  <th className="px-3 py-2 font-medium">Method</th>
+                  <th className="px-3 py-2 font-medium">Channel</th>
+                  <th className="px-3 py-2 font-medium">Reference</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-4 text-[#A49DA1]">
+                      No payments recorded yet. They appear here the moment a tenant pays through your
+                      registered PayHero channel.
+                    </td>
+                  </tr>
+                ) : (
+                  payments.map((payment) => (
+                    <tr key={payment.id} className="border-t border-[#2A2225]">
+                      <td className="whitespace-nowrap px-3 py-2 text-[#D9D2D6]">
+                        {new Date(payment.paid_at).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2">{payment.tenant_name || <span className="text-[#A49DA1]">Unidentified</span>}</td>
+                      <td className="px-3 py-2">
+                        {payment.invoice_number || <span className="text-[#A49DA1]">Not matched</span>}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 font-medium text-[#F6F2F3]">
+                        ${Number(payment.amount).toFixed(2)}
+                      </td>
+                      <td className="px-3 py-2 capitalize text-[#D9D2D6]">
+                        {String(payment.payment_method).replace(/_/g, ' ')}
+                      </td>
+                      <td className="px-3 py-2 text-[#D9D2D6]">
+                        {payment.channel_short_code || <span className="text-[#A49DA1]">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-[#D9D2D6]">
+                        {payment.reference || payment.transaction_ref || <span className="text-[#A49DA1]">—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {payment.matched === false ? (
+                          <span className="rounded-full bg-[#3A1414] px-2.5 py-1 text-xs font-semibold text-[#F08A8A]">
+                            Needs reconciliation
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-[#152A1C] px-2.5 py-1 text-xs font-semibold text-[#6FCF97]">
+                            {payment.status}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))
