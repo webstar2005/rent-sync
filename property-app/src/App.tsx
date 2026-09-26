@@ -721,7 +721,7 @@ export default function App() {
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   aria-pressed={showPassword}
                   title={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-[#8A7F83] transition-colors hover:text-[#C9C0C4] focus:outline-none focus-visible:text-[#C65A70]"
+                  className="no-scale absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-[#8A7F83] hover:text-[#C9C0C4] focus:outline-none focus-visible:text-[#C65A70]"
                 >
                   {showPassword ? (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden="true">
