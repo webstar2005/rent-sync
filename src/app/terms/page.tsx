@@ -43,10 +43,6 @@ export default function TermsPage() {
             <p className="text-body text-gray-500">
               Any information supplied through our website is provided voluntarily. We use it to respond to your enquiry, support the sales process, and improve our service offering.
             </p>
-            <h2 className="mt-8 font-heading text-h3 text-ink">Pricing and service availability</h2>
-            <p className="text-body text-gray-500">
-              Pricing examples shown on this website are illustrative and may be adjusted based on final plan scope, number of units, or negotiated terms. Service availability may vary by region, integrations, and implementation requirements.
-            </p>
           </div>
         </div>
       </main>
