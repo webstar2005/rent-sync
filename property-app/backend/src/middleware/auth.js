@@ -1,5 +1,6 @@
 import { verifyToken } from '../utils/auth.js';
 import { query } from '../config/db.js';
+import { logger } from '../utils/logger.js';
 
 // Authenticates the JWT and then re-validates against the live user row on EVERY request:
 //   - role comes from the DB, so a role change takes effect immediately (the JWT claim is not trusted)
@@ -43,7 +44,10 @@ export async function requireAuth(req, res, next) {
       auth_provider: user.auth_provider,
     };
     next();
-  } catch {
-    return res.status(500).json({ message: 'Authentication check failed' });
-  }
+    } catch (error) {
+      // Logged, not swallowed: this failed silently as a bare 500 on every authenticated route when
+      // the users table was missing a column, which cost a long debugging session to trace.
+      logger.error({ err: error.message }, 'Authentication check failed');
+      return res.status(500).json({ message: 'Authentication check failed' });
+    }
 }
