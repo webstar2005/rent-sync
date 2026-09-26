@@ -5,7 +5,7 @@ import { getApiHealth } from './lib/api/client';
 import { createProperty, getProperties, updateProperty, deleteProperty, type Property } from './lib/api/properties';
 import { createTenant, deleteTenant, getTenants, updateTenantStatus, type Tenant } from './lib/api/tenants';
 import { getInvoices, generateInvoices, type Invoice } from './lib/api/invoices';
-import { getPayments, requestInvoicePayment, type Payment } from './lib/api/payments';
+import { getPayments, requestInvoicePayment, createPayment, type Payment } from './lib/api/payments';
 import { createMaintenanceRequest, getMaintenanceRequests, updateMaintenanceRequest, deleteMaintenanceRequest, type MaintenanceRequest } from './lib/api/maintenance';
 import { getPayHeroWalletBalance, createPaymentChannel, getPaymentChannels, syncPaymentChannel, updatePaymentChannel, type PaymentChannel, type WalletBalance } from './lib/api/channels';
 import { getReconciliationAlerts, getReconciliationSummary, reconcilePayment, type ReconciliationAlert } from './lib/api/reconciliation';
@@ -45,6 +45,18 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [requestingInvoiceId, setRequestingInvoiceId] = useState<number | null>(null);
   const [paymentRequestNotice, setPaymentRequestNotice] = useState('');
+
+  // Manual payment capture. Most rent in Kenya arrives as M-Pesa Send Money straight into the
+  // landlord's own number, which no payment provider can see and therefore never calls us about.
+  // This is the only way that money reaches the ledger, so it is a first-class flow and not a
+  // fallback hidden behind a menu.
+  const [recordingInvoiceId, setRecordingInvoiceId] = useState<number | null>(null);
+  const [recordingTenantId, setRecordingTenantId] = useState<number | null>(null);
+  const [recordAmount, setRecordAmount] = useState('');
+  const [recordMethod, setRecordMethod] = useState<'bank_transfer' | 'mobile_money' | 'cash' | 'card' | 'other'>('mobile_money');
+  const [recordReference, setRecordReference] = useState('');
+  const [savingPayment, setSavingPayment] = useState(false);
+  const [recordError, setRecordError] = useState('');
   const [error, setError] = useState('');
   const [generatingInvoices, setGeneratingInvoices] = useState(false);
   const [invoiceNotice, setInvoiceNotice] = useState('');
@@ -263,6 +275,72 @@ export default function App() {
         return;
       }
       setError(`Unable to load dashboard data: ${msg}. Please refresh or check backend logs (backend npm run dev).`);
+    }
+  }
+
+  function openRecordPayment(invoice: Invoice, tenantId: number, outstanding: number) {
+    setRecordingInvoiceId(invoice.id);
+    setRecordingTenantId(tenantId);
+    setRecordAmount(outstanding > 0 ? outstanding.toFixed(2) : '');
+    setRecordMethod('mobile_money');
+    setRecordReference('');
+    setRecordError('');
+  }
+
+  function closeRecordPayment() {
+    setRecordingInvoiceId(null);
+    setRecordingTenantId(null);
+    setRecordError('');
+  }
+
+  async function handleSaveRecordedPayment(event: FormEvent, invoice: Invoice) {
+    event.preventDefault();
+    if (recordingTenantId === null) return;
+
+    const amount = Number(recordAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setRecordError('Enter the amount you received.');
+      return;
+    }
+
+    const paidSoFar = payments
+      .filter((payment) => payment.invoice_id === invoice.id && payment.status === 'completed')
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const outstanding = Number(invoice.amount) - paidSoFar;
+
+    // Refuse to overfill the invoice. A mistyped digit here would silently mark rent paid that never
+    // arrived, which is the one mistake a rent ledger cannot recover from.
+    if (amount > outstanding) {
+      setRecordError(
+        `That is more than the ${kes(outstanding)} still outstanding on ${invoice.invoice_number}. ` +
+          `Split the difference across invoices instead of overfilling this one.`
+      );
+      return;
+    }
+
+    setSavingPayment(true);
+    setRecordError('');
+    try {
+      await createPayment({
+        invoice_id: invoice.id,
+        tenant_id: recordingTenantId,
+        amount,
+        payment_method: recordMethod,
+        reference: recordReference.trim() || undefined,
+        status: 'completed',
+      });
+      // Reload so the invoice status, the KPIs and the payments list all reflect the new row.
+      await loadProperties(true);
+      setLastUpdated(new Date());
+      setPaymentRequestNotice(
+        `Recorded ${kes(amount)} against ${invoice.invoice_number}. The invoice is now ` +
+          `${amount + paidSoFar >= Number(invoice.amount) ? 'paid in full' : 'part paid'}.`
+      );
+      closeRecordPayment();
+    } catch (error) {
+      setRecordError(error instanceof Error ? error.message : 'Could not save the payment');
+    } finally {
+      setSavingPayment(false);
     }
   }
 
@@ -1945,16 +2023,126 @@ export default function App() {
                               <p className="text-sm text-[#A99FA3]">Amount: {kes(invoice.amount)}</p>
                               <p className="text-sm text-[#A99FA3]">Paid: {kes(invoicePaid)}</p>
                               {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRequestPayment(invoice)}
-                                  disabled={requestingInvoiceId === invoice.id}
-                                  className="mt-3 w-full rounded-xl bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  {requestingInvoiceId === invoice.id
-                                    ? 'Sending prompt…'
-                                    : `Request ${kes(Number(invoice.amount) - invoicePaid)} payment`}
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRequestPayment(invoice)}
+                                    disabled={requestingInvoiceId === invoice.id}
+                                    className="mt-3 w-full rounded-xl bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {requestingInvoiceId === invoice.id
+                                      ? 'Sending prompt…'
+                                      : `Request ${kes(Number(invoice.amount) - invoicePaid)} payment`}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (recordingInvoiceId === invoice.id) {
+                                        closeRecordPayment();
+                                        return;
+                                      }
+                                      openRecordPayment(invoice, selectedTenant.id, Number(invoice.amount) - invoicePaid);
+                                    }}
+                                    disabled={savingPayment}
+                                    aria-expanded={recordingInvoiceId === invoice.id}
+                                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                      recordingInvoiceId === invoice.id
+                                        ? 'border-[#7A3B4C] bg-[#2B1A1E] text-[#E8B4BF]'
+                                        : 'border-[#4A3339] bg-[#161112] text-[#CFC5CA] hover:border-[#7A3B4C]'
+                                    }`}
+                                  >
+                                    {recordingInvoiceId === invoice.id
+                                      ? 'Cancel recording'
+                                      : 'I already received this payment'}
+                                  </button>
+
+                                  {recordingInvoiceId === invoice.id && (
+                                    <form
+                                      onSubmit={(event) => handleSaveRecordedPayment(event, invoice)}
+                                      className="mt-3 space-y-3 rounded-xl border border-[#3A2E32] bg-[#1C1618] p-3"
+                                    >
+                                      <p className="text-xs text-[#A99FA3]">
+                                        For money that reached you outside a registered channel — M-Pesa Send
+                                        Money to your number, cash, or a bank transfer. There is no automatic
+                                        confirmation for these, so record it here.
+                                      </p>
+
+                                      <div>
+                                        <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-amount-${invoice.id}`}>
+                                          Amount received (KES)
+                                        </label>
+                                        <input
+                                          id={`record-amount-${invoice.id}`}
+                                          type="number"
+                                          inputMode="decimal"
+                                          step="0.01"
+                                          min="0"
+                                          value={recordAmount}
+                                          onChange={(event) => setRecordAmount(event.target.value)}
+                                          className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-method-${invoice.id}`}>
+                                          How did it arrive?
+                                        </label>
+                                        <select
+                                          id={`record-method-${invoice.id}`}
+                                          value={recordMethod}
+                                          onChange={(event) =>
+                                            setRecordMethod(event.target.value as typeof recordMethod)
+                                          }
+                                          className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
+                                        >
+                                          <option value="mobile_money">M-Pesa Send Money</option>
+                                          <option value="bank_transfer">Bank transfer</option>
+                                          <option value="cash">Cash</option>
+                                          <option value="card">Card</option>
+                                          <option value="other">Other</option>
+                                        </select>
+                                      </div>
+
+                                      <div>
+                                        <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-ref-${invoice.id}`}>
+                                          Reference (optional)
+                                        </label>
+                                        <input
+                                          id={`record-ref-${invoice.id}`}
+                                          type="text"
+                                          value={recordReference}
+                                          onChange={(event) => setRecordReference(event.target.value)}
+                                          placeholder="e.g. QJG7X4K2PL"
+                                          className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
+                                        />
+                                      </div>
+
+                                      {recordError && (
+                                        <p className="rounded-lg border border-[#4A2127] bg-[#2E1519] p-2 text-xs text-[#F0A0AB]">
+                                          {recordError}
+                                        </p>
+                                      )}
+
+                                      <div className="flex gap-2">
+                                        <button
+                                          type="submit"
+                                          disabled={savingPayment}
+                                          className="flex-1 rounded-lg bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                          {savingPayment ? 'Saving…' : 'Save payment'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={closeRecordPayment}
+                                          disabled={savingPayment}
+                                          className="rounded-lg border border-[#4A3339] bg-[#161112] px-3 py-2 text-sm font-medium text-[#CFC5CA] disabled:opacity-50"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </form>
+                                  )}
+                                </>
                               )}
                             </div>
                           );

@@ -275,3 +275,144 @@ describe('POST /api/payments/request — the link that makes a callback possible
     await request(app).post('/api/payments/request').send({ invoice_id: 1 }).expect(401);
   });
 });
+
+describe('POST /api/payments - manual capture of rent that no provider can see', () => {
+  // Most Kenyan rent arrives as M-Pesa Send Money straight into the landlord's own number. No
+  // payment provider observes that, so nothing ever calls our webhook and the money has to be keyed
+  // in by hand. This endpoint is the only way that money reaches the ledger, so the transitions it
+  // causes on the invoice are what a landlord's arrears figures are built from.
+
+  async function seedInvoiceFor(landlord, { amount = 10000, status = 'pending' } = {}) {
+    const property = await seedProperty(landlord.user.id, { name: 'Nia Flats' });
+    const tenant = await seedTenant(property.id, { name: 'Grace Wanjiku', phone: '0712345678' });
+    const invoice = await seedInvoice(tenant.id, property.id, {
+      invoice_number: 'INV-M1',
+      amount,
+      status,
+    });
+    return { property, tenant, invoice };
+  }
+
+  it('records a Send Money payment and marks the invoice paid', async () => {
+    const landlord = await seedLandlord({ name: 'Nia' });
+    const { tenant, invoice } = await seedInvoiceFor(landlord);
+
+    const res = await request(app)
+      .post('/api/payments')
+      .set(auth(landlord.token))
+      .send({
+        invoice_id: invoice.id,
+        tenant_id: tenant.id,
+        amount: 10000,
+        payment_method: 'mobile_money',
+        reference: 'QJG7X4K2PL',
+        status: 'completed',
+      })
+      .expect(201);
+
+    assert.equal(Number(res.body.amount), 10000);
+    assert.equal(res.body.payment_method, 'mobile_money');
+    assert.equal(res.body.reference, 'QJG7X4K2PL');
+    // Recorded as reconciled: a landlord keyed this in against a specific invoice on purpose, so it
+    // must not show up in the "needs reconciliation" queue alongside unmatched webhook payments.
+    assert.equal(res.body.matched, true);
+    assert.equal(res.body.invoice_status, 'paid');
+
+    const inv = await pool.query('SELECT status FROM invoices WHERE id = $1', [invoice.id]);
+    assert.equal(inv.rows[0].status, 'paid');
+  });
+
+  it('leaves a part payment as partial and later completes it', async () => {
+    const landlord = await seedLandlord({ name: 'Nia' });
+    const { tenant, invoice } = await seedInvoiceFor(landlord, { amount: 10000 });
+
+    const first = await request(app)
+      .post('/api/payments')
+      .set(auth(landlord.token))
+      .send({ invoice_id: invoice.id, tenant_id: tenant.id, amount: 4000, payment_method: 'cash', status: 'completed' })
+      .expect(201);
+    assert.equal(first.body.invoice_status, 'partial');
+
+    // The tenant sends the rest a week later as Send Money.
+    const second = await request(app)
+      .post('/api/payments')
+      .set(auth(landlord.token))
+      .send({ invoice_id: invoice.id, tenant_id: tenant.id, amount: 6000, payment_method: 'mobile_money', status: 'completed' })
+      .expect(201);
+    assert.equal(second.body.invoice_status, 'paid');
+
+    const inv = await pool.query('SELECT status FROM invoices WHERE id = $1', [invoice.id]);
+    assert.equal(inv.rows[0].status, 'paid');
+  });
+
+  it('leaves the invoice untouched when the payment is not completed', async () => {
+    const landlord = await seedLandlord({ name: 'Nia' });
+    const { tenant, invoice } = await seedInvoiceFor(landlord);
+
+    await request(app)
+      .post('/api/payments')
+      .set(auth(landlord.token))
+      .send({ invoice_id: invoice.id, tenant_id: tenant.id, amount: 10000, payment_method: 'mobile_money', status: 'pending' })
+      .expect(201);
+
+    const inv = await pool.query('SELECT status FROM invoices WHERE id = $1', [invoice.id]);
+    assert.equal(inv.rows[0].status, 'pending', 'an unconfirmed payment must not mark rent collected');
+  });
+
+  it('rejects a zero or negative amount', async () => {
+    const landlord = await seedLandlord({ name: 'Nia' });
+    const { tenant, invoice } = await seedInvoiceFor(landlord);
+
+    for (const amount of [0, -500]) {
+      const res = await request(app)
+        .post('/api/payments')
+        .set(auth(landlord.token))
+        .send({ invoice_id: invoice.id, tenant_id: tenant.id, amount, payment_method: 'cash', status: 'completed' })
+        .expect(400);
+      assert.ok(res.body.message);
+    }
+    const { rows } = await pool.query('SELECT id FROM payments');
+    assert.equal(rows.length, 0);
+  });
+
+  it("refuses another landlord's invoice", async () => {
+    const owner = await seedLandlord({ name: 'Nia' });
+    const { tenant, invoice } = await seedInvoiceFor(owner);
+    const intruder = await seedLandlord({ name: 'Intruder' });
+
+    await request(app)
+      .post('/api/payments')
+      .set(auth(intruder.token))
+      .send({ invoice_id: invoice.id, tenant_id: tenant.id, amount: 10000, payment_method: 'cash', status: 'completed' })
+      .expect(403);
+  });
+
+  it('refuses a tenant that does not belong to the invoice property', async () => {
+    const landlord = await seedLandlord({ name: 'Nia' });
+    const { invoice } = await seedInvoiceFor(landlord);
+    const otherProperty = await seedProperty(landlord.user.id, { name: 'Other Block' });
+    const stranger = await seedTenant(otherProperty.id, { name: 'Wrong Tenant' });
+
+    await request(app)
+      .post('/api/payments')
+      .set(auth(landlord.token))
+      .send({ invoice_id: invoice.id, tenant_id: stranger.id, amount: 100, payment_method: 'cash', status: 'completed' })
+      .expect(403);
+  });
+
+  it('refuses a cancelled invoice', async () => {
+    const landlord = await seedLandlord({ name: 'Nia' });
+    const { tenant, invoice } = await seedInvoiceFor(landlord, { status: 'cancelled' });
+
+    const res = await request(app)
+      .post('/api/payments')
+      .set(auth(landlord.token))
+      .send({ invoice_id: invoice.id, tenant_id: tenant.id, amount: 100, payment_method: 'cash', status: 'completed' })
+      .expect(409);
+    assert.match(res.body.message, /cancelled/i);
+  });
+
+  it('requires authentication', async () => {
+    await request(app).post('/api/payments').send({ invoice_id: 1, tenant_id: 1, amount: 1 }).expect(401);
+  });
+});
