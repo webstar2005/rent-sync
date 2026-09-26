@@ -7,9 +7,43 @@
 // Requires a reachable Postgres (e.g. `createdb property_app_test`). Schema (schema.sql + all
 // migrations) is applied on demand via applySchema().
 
+// Load .env here rather than relying on app.js: the guard below needs DATABASE_URL_TEST, and app.js
+// has not been imported yet at this point. override:false keeps anything already exported by the
+// caller (CI, or a one-off command) authoritative.
+import dotenv from 'dotenv';
+dotenv.config();
+
+// The suite TRUNCATEs every domain table before each test. That makes pointing it at the wrong
+// database unrecoverable, so this refuses to run unless the target is provably a scratch database.
+// The name check is the backstop; the identity check catches a dev database that happens to be
+// named *_test.
+const testUrl = process.env.DATABASE_URL_TEST;
+if (!testUrl) {
+  throw new Error(
+    'DATABASE_URL_TEST is not set. The test suite truncates all tables, so it must be given an ' +
+      'explicit throwaway database. Copy the DATABASE_URL from .env, change the database name to ' +
+      'property_app_test, and export it as DATABASE_URL_TEST.'
+  );
+}
+
+const testDbName = decodeURIComponent(new URL(testUrl).pathname.replace(/^\//, ''));
+if (!/_test$/i.test(testDbName)) {
+  throw new Error(
+    `Refusing to run tests against database "${testDbName}": the name must end in _test. ` +
+      'The suite deletes all rows, so pointing it at a real database destroys it.'
+  );
+}
+
+const devDbName = process.env.DATABASE_URL
+  ? decodeURIComponent(new URL(process.env.DATABASE_URL).pathname.replace(/^\//, ''))
+  : null;
+if (devDbName && devDbName === testDbName) {
+  throw new Error(`DATABASE_URL_TEST and DATABASE_URL both point at "${testDbName}". Refusing to run.`);
+}
+
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
-process.env.DATABASE_URL = process.env.DATABASE_URL_TEST || 'postgresql://postgres:postgres@localhost:5432/property_app_test';
+process.env.DATABASE_URL = testUrl;
 process.env.PAYHERO_AUTH_TOKEN = process.env.PAYHERO_AUTH_TOKEN || 'test-payhero-token';
 process.env.PAYHERO_ACCOUNT_ID = process.env.PAYHERO_ACCOUNT_ID || '5000';
 process.env.PAYHERO_WEBHOOK_SECRET = process.env.PAYHERO_WEBHOOK_SECRET || 'test-webhook-secret';
