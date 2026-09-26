@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE TABLE IF NOT EXISTS payhero_callback_log (
   id SERIAL PRIMARY KEY,
   raw_payload JSONB NOT NULL,
-  status TEXT NOT NULL DEFAULT 'received' CHECK (status IN ('received', 'processed', 'duplicate', 'unmatched_channel', 'unmatched_tenant', 'failed', 'ignored')),
+    status TEXT NOT NULL DEFAULT 'received' CHECK (status IN ('received', 'processed', 'duplicate', 'unmatched_channel', 'unmatched_tenant', 'failed', 'ignored', 'rejected_auth')),
   payhero_channel_id TEXT,
   short_code TEXT,
   transaction_ref TEXT,

@@ -145,30 +145,86 @@ export function lowBalanceThreshold() {
 }
 
 // ---- Webhook verification ----
-// PayHero's documented payment callback carries no signature, so there is no channel signature to
-// verify against (confirmed in their current docs). We secure the endpoint ourselves:
-//   1. shared secret — expected ONLY in the `x-payhero-secret` header (never a query string, which
-//      would leak into URL logs). Compare in constant time. Fails CLOSED in every environment when
-//      PAYHERO_WEBHOOK_SECRET is unset or the header is missing/incorrect.
-//   2. optional IP allowlist via PAYHERO_IP_ALLOWLIST (loose check loosened: exact/CIDR match only).
+// PayHero's documented payment callback carries no signature, and their docs describe no way to set a
+// custom header on it. A header-only secret is therefore UNSATISFIABLE: the endpoint could never
+// accept a real callback, and every real payment would be dropped with a 403. We own the callback URL
+// instead — it is set once in the PayHero dashboard (account-level callback) or per STK push — so the
+// secret can travel in the query string of a URL PayHero is told to call.
+//   1. shared secret — accepted from the `x-payhero-secret` / `x-payhero-webhook-secret` header OR the
+//      `?secret=` query param, whichever arrives. Compared in constant time. Fails CLOSED in every
+//      environment when PAYHERO_WEBHOOK_SECRET is unset or the value is missing/incorrect.
+//   2. optional IP allowlist via PAYHERO_IP_ALLOWLIST (exact/CIDR match only) as defence in depth —
+//      set this as soon as PayHero publishes their outbound callback IPs.
+//
+// TRADEOFF: a query-string secret can be captured by access logs along the path (Render's included).
+// This is the standard fallback for providers that offer no signature, but it is why the secret must
+// be long and random, TLS-only, and rotated if ever exposed. We never write it to our own logs —
+// rejected attempts record only a salted-length SHA-256 fingerprint via redactSecret().
+const WEBHOOK_SECRET_HEADERS = ['x-payhero-secret', 'x-payhero-webhook-secret'];
+
 export function clientIp(req) {
   // No `trust proxy` is configured, so req.ip is the real socket address — never trust x-forwarded-for
   // (a plain client can spoof it, and we must not let that bypass a static allowlist).
   return String(req.ip || '');
 }
 
-export function isAuthorizedWebhook(req) {
+// Never log the secret itself. A truncated hash is enough to tell "PayHero sent our secret" from
+// "PayHero sent something else" when diagnosing a rejection.
+export function redactSecret(value) {
+  if (value === undefined || value === null || value === '') return '(absent)';
+  const hash = crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 12);
+  return `[redacted sha256:${hash} len=${String(value).length}]`;
+}
+
+function providedWebhookSecret(req) {
+  for (const name of WEBHOOK_SECRET_HEADERS) {
+    const value = req.headers?.[name];
+    if (typeof value === 'string' && value.length > 0) return { value, via: name };
+  }
+  for (const key of ['secret', 'token']) {
+    const value = req.query?.[key];
+    if (typeof value === 'string' && value.length > 0) return { value, via: `query.${key}` };
+  }
+  return { value: null, via: null };
+}
+
+// Returns { ok, reason, via, provided }. `reason` is a stable short token safe to persist, so a
+// rejected callback leaves an audit trail instead of vanishing into a 403.
+export function verifyWebhookRequest(req) {
   const secret = process.env.PAYHERO_WEBHOOK_SECRET;
-  const provided = req.headers['x-payhero-secret'];
+  if (!secret || String(secret).trim() === '') {
+    return { ok: false, reason: 'secret_not_configured', via: null, provided: null };
+  }
 
-  if (!secret || typeof provided !== 'string' || provided.length === 0) return false;
+  const { value, via } = providedWebhookSecret(req);
+  if (!value) return { ok: false, reason: 'secret_missing', via: null, provided: null };
 
-  const a = Buffer.from(provided);
-  const b = Buffer.from(secret);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
+  const a = Buffer.from(value);
+  const b = Buffer.from(String(secret));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return { ok: false, reason: 'secret_mismatch', via, provided: redactSecret(value) };
+  }
 
-  const ipAllow = process.env.PAYHERO_IP_ALLOWLIST;
-  return ipAllow ? isIpAllowed(req) : true;
+  if (process.env.PAYHERO_IP_ALLOWLIST && !isIpAllowed(req)) {
+    return { ok: false, reason: 'ip_not_allowed', via, provided: redactSecret(value) };
+  }
+
+  return { ok: true, reason: 'ok', via, provided: redactSecret(value) };
+}
+
+export function isAuthorizedWebhook(req) {
+  return verifyWebhookRequest(req).ok;
+}
+
+// Single source of truth for the URL to paste into the PayHero dashboard, so the value that is
+// registered is exactly the value the endpoint verifies.
+export function payheroCallbackUrl() {
+  const secret = process.env.PAYHERO_WEBHOOK_SECRET;
+  if (!secret || String(secret).trim() === '') {
+    throw new Error('PAYHERO_WEBHOOK_SECRET must be set to build the PayHero callback URL');
+  }
+  const base = String(process.env.PAYHERO_WEBHOOK_BASE_URL || 'https://api.rentsync.africa').replace(/\/+$/, '');
+  return `${base}/webhooks/payhero?secret=${encodeURIComponent(String(secret).trim())}`;
 }
 
 function isIpAllowed(req) {

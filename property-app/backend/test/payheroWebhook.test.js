@@ -49,6 +49,73 @@ describe('PayHero webhook → payment pipeline', () => {
     assert.equal(ok.body.status, 'ok');
   });
 
+  it('verification: accepts the secret via the ?secret= query param, the only form PayHero can send', async () => {
+    // PayHero signs nothing and can set no custom header, so the callback URL we register in their
+    // dashboard carries the secret. This is the path a real payment must be able to take.
+    const cb = callbackBody({});
+    const res = await request(app)
+      .post(`${WEBHOOK}?secret=${encodeURIComponent(SECRET)}`)
+      .send(cb.body)
+      .expect(200);
+    assert.equal(res.body.status, 'ok');
+
+    // A wrong secret in the query string is still rejected.
+    await request(app).post(`${WEBHOOK}?secret=wrong-secret`).send(cb.body).expect(403);
+  });
+
+  it('verification: also accepts the x-payhero-webhook-secret header name', async () => {
+    const cb = callbackBody({});
+    const res = await request(app)
+      .post(WEBHOOK)
+      .send(cb.body)
+      .set('x-payhero-webhook-secret', SECRET)
+      .expect(200);
+    assert.equal(res.body.status, 'ok');
+  });
+
+  it('verification: records every rejection in the audit log without leaking the secret', async () => {
+    const cb = callbackBody({});
+
+    await request(app).post(WEBHOOK).send(cb.body).expect(403);
+    await request(app).post(WEBHOOK).send(cb.body).set('x-payhero-secret', 'wrong-secret-value').expect(403);
+
+    const { rows } = await pool.query(
+      `SELECT status, processing_error, raw_payload FROM payhero_callback_log ORDER BY id`
+    );
+    const rejected = rows.filter((r) => r.status === 'rejected_auth');
+    assert.equal(rejected.length, 2, 'both rejections should be auditable');
+
+    // The reason must be diagnosable...
+    assert.match(rejected[0].processing_error, /secret_missing/);
+    assert.match(rejected[1].processing_error, /secret_mismatch/);
+    assert.match(rejected[1].processing_error, /via=x-payhero-secret/);
+    // ...and the payload must survive, since it is the only evidence of PayHero's real shape.
+    assert.deepEqual(rejected[0].raw_payload, cb.body);
+
+    // Neither the presented nor the configured secret may appear anywhere in the row.
+    for (const row of rejected) {
+      assert.doesNotMatch(JSON.stringify(row), /wrong-secret-value/);
+      assert.doesNotMatch(JSON.stringify(row), new RegExp(SECRET));
+      assert.match(row.processing_error, /sha256:/, 'presented value should be fingerprinted, not stored');
+    }
+  });
+
+  it('verification: a valid secret is still rejected when the IP allowlist excludes the caller', async () => {
+    const previous = process.env.PAYHERO_IP_ALLOWLIST;
+    process.env.PAYHERO_IP_ALLOWLIST = '203.0.113.7'; // TEST-NET-3, never the loopback test client
+    try {
+      const cb = callbackBody({});
+      await request(app).post(WEBHOOK).send(cb.body).set('x-payhero-secret', SECRET).expect(403);
+      const { rows } = await pool.query(
+        `SELECT processing_error FROM payhero_callback_log WHERE status = 'rejected_auth'`
+      );
+      assert.match(rows[0].processing_error, /ip_not_allowed/);
+    } finally {
+      if (previous === undefined) delete process.env.PAYHERO_IP_ALLOWLIST;
+      else process.env.PAYHERO_IP_ALLOWLIST = previous;
+    }
+  });
+
   it('routes callbacks to the correct org when two orgs each own a Paybill channel', async () => {
     const a = await seedLandlord({ name: 'Amos' });
     const propA = await seedProperty(a.user.id, { name: 'A Complex' });

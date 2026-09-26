@@ -2,7 +2,7 @@ import express from 'express';
 import { query, withTransaction } from '../config/db.js';
 import { payheroWebhookLimiter } from '../middleware/rateLimit.js';
 import {
-  isAuthorizedWebhook,
+  verifyWebhookRequest,
   clientIp,
   extractResponse,
   extractChannelId,
@@ -180,8 +180,23 @@ async function findOldestOpenInvoice(tenantId) {
 
 router.post('/', payheroWebhookLimiter, async (req, res) => {
   // ---- 1. Verify the callback is genuinely from PayHero ----
-  if (!isAuthorizedWebhook(req)) {
-    logger.warn({ ip: clientIp(req) }, 'PayHero webhook REJECTED — verification failed');
+  // A rejection is recorded (status 'rejected_auth') rather than discarded: it is the only evidence
+  // of what PayHero actually sends, and it is how we diagnose the auth mechanism from evidence
+  // instead of guessing. Never stores the secret — only the reason and a redacted fingerprint.
+  const auth = verifyWebhookRequest(req);
+  if (!auth.ok) {
+    logger.warn(
+      { ip: clientIp(req), reason: auth.reason, via: auth.via, provided: auth.provided },
+      'PayHero webhook REJECTED — verification failed'
+    );
+    await query(
+      `INSERT INTO payhero_callback_log (raw_payload, status, processing_error)
+       VALUES ($1, 'rejected_auth', $2)`,
+      [
+        req.body ?? {},
+        `auth=${auth.reason}${auth.via ? ` via=${auth.via}` : ''}${auth.provided ? ` provided=${auth.provided}` : ''}`,
+      ]
+    ).catch((error) => logger.error({ err: error.message }, 'Failed to log rejected PayHero callback'));
     return res.status(403).json({ status: 'forbidden', message: 'Forbidden' });
   }
 
