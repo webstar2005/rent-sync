@@ -34,16 +34,23 @@ h1, h2, h3, h4 { font-family: var(--font-heading), sans-serif; color: var(--colo
 ::selection { background: var(--color-burgundy-50); color: var(--color-burgundy-700); }
 ::placeholder { color: #6E6468; }
 input, select, textarea, button { transition: all 180ms ease; }
-button:not(:disabled):hover {
+/* Buttons lift on hover as a subtle affordance.
+   Excluded on purpose, because this rule is UNLAYERED and therefore outranks
+   Tailwind's layered utilities:
+   - .absolute  - `position: relative` below would override the button's own
+                  positioning and yank it out of the field/card it sits inside.
+   - .w-full    - scaling a full-width button overflows its container on both
+                  sides, so its edges stop lining up with the surrounding box.
+   - .no-scale  - explicit opt-out (Login/Register and Save/Cancel pairs).
+   Keep that in mind when adding a positioned or full-width button: give it a
+   class listed above, or it will pick up the wrong transform. */
+button:not(:disabled):not(.no-scale):not(.w-full):not(.absolute):hover {
   position: relative;
   z-index: 1;
   transform: scale(1.06);
 }
-button:not(:disabled):active {
+button:not(:disabled):not(.no-scale):not(.w-full):not(.absolute):active {
   transform: scale(0.98);
-}
-button.no-scale:hover, button.no-scale:active {
-  transform: none;
 }
 #google-signin-wrap { transition: transform 180ms ease; }
 #google-signin-wrap:hover {
