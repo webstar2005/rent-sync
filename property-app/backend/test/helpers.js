@@ -176,11 +176,23 @@ export function makePayHeroMock({ channels = [], wallet = { id: 1, account_id: 5
       registry.push(created);
       return jsonResponse(created);
     }
-    if (u.includes('/wallets')) {
-      return jsonResponse(wallet);
-    }
+      if (u.includes('/wallets')) {
+        return jsonResponse(wallet);
+      }
+      // STK push initiation. Echoes back what was sent so tests can assert the collection request
+      // itself (amount, MSISDN, channel, external_reference, callback_url), not just the HTTP result.
+      if (u.endsWith('/payments') && method === 'POST') {
+        const body = JSON.parse(options.body || '{}');
+        return jsonResponse({
+          success: true,
+          status: 'Success',
+          reference: 'PH-TEST-REF',
+          CheckoutRequestID: 'PH-TEST-CHK',
+          external_reference: body.external_reference,
+        });
+      }
 
-    return jsonResponse({ error_message: 'not found' }, 404);
+      return jsonResponse({ error_message: 'not found' }, 404);
   };
 }
 

@@ -5,7 +5,7 @@ import { getApiHealth } from './lib/api/client';
 import { createProperty, getProperties, updateProperty, deleteProperty, type Property } from './lib/api/properties';
 import { createTenant, deleteTenant, getTenants, updateTenantStatus, type Tenant } from './lib/api/tenants';
 import { getInvoices, generateInvoices, type Invoice } from './lib/api/invoices';
-import { getPayments, type Payment } from './lib/api/payments';
+import { getPayments, requestInvoicePayment, type Payment } from './lib/api/payments';
 import { createMaintenanceRequest, getMaintenanceRequests, updateMaintenanceRequest, deleteMaintenanceRequest, type MaintenanceRequest } from './lib/api/maintenance';
 import { getPayHeroWalletBalance, createPaymentChannel, getPaymentChannels, syncPaymentChannel, updatePaymentChannel, type PaymentChannel, type WalletBalance } from './lib/api/channels';
 import { getReconciliationAlerts, getReconciliationSummary, reconcilePayment, type ReconciliationAlert } from './lib/api/reconciliation';
@@ -36,6 +36,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [requestingInvoiceId, setRequestingInvoiceId] = useState<number | null>(null);
+  const [paymentRequestNotice, setPaymentRequestNotice] = useState('');
   const [error, setError] = useState('');
   const [generatingInvoices, setGeneratingInvoices] = useState(false);
   const [invoiceNotice, setInvoiceNotice] = useState('');
@@ -254,6 +256,23 @@ export default function App() {
         return;
       }
       setError(`Unable to load dashboard data: ${msg}. Please refresh or check backend logs (backend npm run dev).`);
+    }
+  }
+
+  async function handleRequestPayment(invoice: Invoice) {
+    setRequestingInvoiceId(invoice.id);
+    setPaymentRequestNotice('');
+    try {
+      const result = await requestInvoicePayment(invoice.id);
+      setPaymentRequestNotice(
+        `STK prompt sent to ${result.tenant_name} (${result.phone}) for $${Number(result.amount).toFixed(2)} ` +
+          `on ${result.invoice_number} via ${result.channel.channel_type} ${result.channel.short_code}. ` +
+          `It will appear under Payments received the moment PayHero confirms it.`
+      );
+    } catch (error) {
+      setPaymentRequestNotice(error instanceof Error ? error.message : 'Could not request payment');
+    } finally {
+      setRequestingInvoiceId(null);
     }
   }
 
@@ -1840,15 +1859,32 @@ export default function App() {
                                 {invoice.status}
                               </span>
                             </div>
-                            <p className="mt-2 text-sm text-[#A99FA3]">Due: {invoice.due_date}</p>
-                            <p className="text-sm text-[#A99FA3]">Amount: ${Number(invoice.amount).toFixed(2)}</p>
-                            <p className="text-sm text-[#A99FA3]">Paid: ${invoicePaid.toFixed(2)}</p>
-                          </div>
-                        );
-                      })
+                              <p className="mt-2 text-sm text-[#A99FA3]">Due: {invoice.due_date}</p>
+                              <p className="text-sm text-[#A99FA3]">Amount: ${Number(invoice.amount).toFixed(2)}</p>
+                              <p className="text-sm text-[#A99FA3]">Paid: ${invoicePaid.toFixed(2)}</p>
+                              {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRequestPayment(invoice)}
+                                  disabled={requestingInvoiceId === invoice.id}
+                                  className="mt-3 w-full rounded-xl bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {requestingInvoiceId === invoice.id
+                                    ? 'Sending prompt…'
+                                    : `Request $${(Number(invoice.amount) - invoicePaid).toFixed(2)} payment`}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                    {paymentRequestNotice && (
+                      <p className="mt-3 rounded-2xl border border-[#3A2E32] bg-[#1C1618] p-3 text-sm text-[#CFC5CA]">
+                        {paymentRequestNotice}
+                      </p>
                     )}
                   </div>
-                </div>
 
                 <div>
                   <h4 className="mb-3 text-lg font-semibold text-[#F6F2F3]">Payment history</h4>

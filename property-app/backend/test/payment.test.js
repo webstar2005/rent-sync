@@ -11,6 +11,9 @@ import {
   seedInvoice,
   seedPayment,
   seedChannel,
+  makePayHeroMock,
+  setPayHeroMock,
+  pool,
   app,
 } from './helpers.js';
 
@@ -120,5 +123,155 @@ describe('GET /api/payments — everything received is visible', () => {
 
   it('requires authentication', async () => {
     await request(app).get('/api/payments').expect(401);
+  });
+});
+
+describe('POST /api/payments/request — the link that makes a callback possible', () => {
+  // Without this endpoint nothing in the product can ever START a collection, so no PayHero callback
+  // can exist and the dashboard can never update. initiateStkPush() was previously reachable only
+  // from a smoke script.
+
+  async function seedOpenInvoice({ phone = '0712345678', amount = 10000, status = 'pending' } = {}) {
+    const landlord = await seedLandlord({ name: 'Nia' });
+    const property = await seedProperty(landlord.user.id, { name: 'Nia Flats' });
+    const tenant = await seedTenant(property.id, { name: 'Tenant One', phone });
+    const invoice = await seedInvoice(tenant.id, property.id, {
+      invoice_number: 'INV-N1',
+      amount,
+      status,
+    });
+    const channel = await seedChannel(landlord.user.id, {
+      channel_type: 'till',
+      short_code: '778899',
+      payhero_channel_id: '9001',
+    });
+    return { landlord, property, tenant, invoice, channel };
+  }
+
+  it('sends an STK push carrying the invoice number and a callback URL', async () => {
+    const ctx = await seedOpenInvoice();
+    // Capture exactly what went to PayHero.
+    const sent = [];
+    setPayHeroMock(async (url, options = {}) => {
+      if (String(url).endsWith('/payments') && (options.method || 'GET') === 'POST') {
+        sent.push(JSON.parse(options.body || '{}'));
+        return { ok: true, status: 200, text: async () => JSON.stringify({ success: true, reference: 'PH-1' }) };
+      }
+      return makePayHeroMock()(url, options);
+    });
+
+    const res = await request(app)
+      .post('/api/payments/request')
+      .set(auth(ctx.landlord.token))
+      .send({ invoice_id: ctx.invoice.id })
+      .expect(201);
+
+    assert.equal(res.body.status, 'requested');
+    assert.equal(res.body.invoice_number, 'INV-N1');
+    assert.equal(res.body.amount, 10000);
+    // 0712345678 must reach PayHero as 254712345678, or the STK push cannot resolve the customer.
+    assert.equal(res.body.phone, '254712345678');
+
+    assert.equal(sent.length, 1);
+    const body = sent[0];
+    assert.equal(body.amount, 10000);
+    assert.equal(body.phone_number, '254712345678');
+    assert.equal(body.channel_id, 9001);
+    // The invoice number is the ONLY identifier guaranteed to come back in PayHero's callback, so it
+    // must be the external_reference or the payment can never be matched to this invoice.
+    assert.equal(body.external_reference, 'INV-N1');
+    // A per-request callback_url means we get the result even if the account-level setting in
+    // PayHero's dashboard is missing or stale.
+    assert.match(body.callback_url, /\/webhooks\/payhero\?secret=/);
+  });
+
+  it('does NOT record a payment until PayHero confirms it', async () => {
+    const ctx = await seedOpenInvoice();
+    setPayHeroMock(makePayHeroMock());
+
+    await request(app)
+      .post('/api/payments/request')
+      .set(auth(ctx.landlord.token))
+      .send({ invoice_id: ctx.invoice.id })
+      .expect(201);
+
+    // A declined or abandoned prompt must never look like rent collected.
+    const { rows } = await pool.query('SELECT id FROM payments');
+    assert.equal(rows.length, 0, 'requesting a payment must not create a payment row');
+
+    const inv = await pool.query('SELECT status FROM invoices WHERE id = $1', [ctx.invoice.id]);
+    assert.equal(inv.rows[0].status, 'pending', 'invoice status must not change until the callback arrives');
+  });
+
+  it('requests only the outstanding balance of a part-paid invoice', async () => {
+    const ctx = await seedOpenInvoice({ amount: 10000 });
+    await seedPayment(ctx.landlord.user.id, ctx.tenant.id, ctx.invoice.id, {
+      amount: 4000,
+      status: 'completed',
+    });
+
+    setPayHeroMock(makePayHeroMock());
+    const res = await request(app)
+      .post('/api/payments/request')
+      .set(auth(ctx.landlord.token))
+      .send({ invoice_id: ctx.invoice.id })
+      .expect(201);
+
+    assert.equal(res.body.amount, 6000, 'must request the remaining 6000, not the full 10000 again');
+  });
+
+  it('refuses when the landlord has no usable registered channel', async () => {
+    const landlord = await seedLandlord({ name: 'Omar' });
+    const property = await seedProperty(landlord.user.id);
+    const tenant = await seedTenant(property.id, { name: 'No Channel Tenant' });
+    const invoice = await seedInvoice(tenant.id, property.id, { invoice_number: 'INV-O1' });
+    setPayHeroMock(makePayHeroMock());
+
+    const res = await request(app)
+      .post('/api/payments/request')
+      .set(auth(landlord.token))
+      .send({ invoice_id: invoice.id })
+      .expect(422);
+    assert.match(res.body.message, /payment channel/i);
+  });
+
+  it('refuses when the tenant has no usable phone number', async () => {
+    const ctx = await seedOpenInvoice({ phone: '' });
+    setPayHeroMock(makePayHeroMock());
+
+    const res = await request(app)
+      .post('/api/payments/request')
+      .set(auth(ctx.landlord.token))
+      .send({ invoice_id: ctx.invoice.id })
+      .expect(422);
+    assert.match(res.body.message, /phone number/i);
+  });
+
+  it('refuses an already-paid invoice', async () => {
+    const ctx = await seedOpenInvoice({ status: 'paid' });
+    setPayHeroMock(makePayHeroMock());
+
+    const res = await request(app)
+      .post('/api/payments/request')
+      .set(auth(ctx.landlord.token))
+      .send({ invoice_id: ctx.invoice.id })
+      .expect(409);
+    assert.match(res.body.message, /already fully paid/i);
+  });
+
+  it("refuses another landlord's invoice", async () => {
+    const ctx = await seedOpenInvoice();
+    const intruder = await seedLandlord({ name: 'Intruder' });
+    setPayHeroMock(makePayHeroMock());
+
+    await request(app)
+      .post('/api/payments/request')
+      .set(auth(intruder.token))
+      .send({ invoice_id: ctx.invoice.id })
+      .expect(403);
+  });
+
+  it('requires authentication', async () => {
+    await request(app).post('/api/payments/request').send({ invoice_id: 1 }).expect(401);
   });
 });

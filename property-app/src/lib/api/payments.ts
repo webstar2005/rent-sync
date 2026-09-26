@@ -24,6 +24,21 @@ export function getPayments() {
   return api.get<Payment[]>('/api/payments');
 }
 
+// Asks PayHero to push an STK prompt to the tenant's phone for this invoice's outstanding balance.
+// Nothing is recorded as paid here — the payment row is created only when PayHero's callback confirms
+// it, so a declined or abandoned prompt is never mistaken for rent collected.
+export function requestInvoicePayment(invoiceId: number) {
+  return api.post<{
+    status: string;
+    invoice_id: number;
+    invoice_number: string;
+    tenant_name: string;
+    phone: string;
+    amount: number;
+    channel: { id: number; short_code: string; channel_type: string };
+  }>('/api/payments/request', { invoice_id: invoiceId });
+}
+
 export function createPayment(payload: {
   invoice_id: number;
   tenant_id: number;
