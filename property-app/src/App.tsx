@@ -1142,7 +1142,7 @@ export default function App() {
             <p className="mt-2 text-sm leading-relaxed text-[#C9C0C4]">
               As a landlord, start by adding a property (name, address, units, rent due day). Each property is independent — tenants, invoices, and payments are scoped to that property. After you add one, the “Collections by property” and “Paid vs unpaid” cards below will populate, and you can import tenants in bulk.
             </p>
-            <p className="mt-2 text-xs text-[#A49DA1]">Tip: Due day 5th means invoices auto-generate at month-end for the 5th; tenants see that date.</p>
+            <p className="mt-2 text-xs text-[#A49DA1]">Tip: Due day 5th means invoices auto-generate at month-end for the 5th, so you can collect from the 1st.</p>
           </section>
         )}
 
@@ -1167,7 +1167,7 @@ export default function App() {
 
         <div className="grid gap-6 xl:grid-cols-2">
           <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-            <div className="$(mb-4 )flex flex-wrap items-center justify-between gap-3">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xl font-semibold text-[#F6F2F3]">Collections by property</h2>
               <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{properties.length} total</span>
             </div>
@@ -1361,7 +1361,7 @@ export default function App() {
         </div>
 
         <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="$(mb-4 )flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-[#F6F2F3]">Paid vs unpaid by property</h2>
             <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{propertyPaymentStatus.length} properties</span>
           </div>
@@ -1412,7 +1412,7 @@ export default function App() {
         </section>
 
         <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="$(mb-4 )flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-[#F6F2F3]">Recent invoices</h2>
             <div className="flex items-center gap-3">
               <button
@@ -1550,8 +1550,8 @@ export default function App() {
 
           {payments.length === 0 && (
             <p className="mt-4 rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1] sm:hidden">
-              No payments recorded yet. They appear here the moment a tenant pays through your registered
-              PayHero channel.
+                    No payments recorded yet. They appear here the moment a tenant pays through your
+                    registered PayHero channel, or when you record one you already received.
             </p>
           )}
 
@@ -1573,8 +1573,8 @@ export default function App() {
                 {payments.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-3 py-4 text-[#A49DA1]">
-                      No payments recorded yet. They appear here the moment a tenant pays through your
-                      registered PayHero channel.
+                  No payments recorded yet. They appear here the moment a tenant pays through your
+                  registered PayHero channel, or when you record one you already received.
                     </td>
                   </tr>
                 ) : (
@@ -1619,7 +1619,7 @@ export default function App() {
         </div>
 
         <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="$(mb-4 )flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-[#F6F2F3]">Payment alerts</h2>
             <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{reconciliationAlerts.length} entries</span>
           </div>
@@ -1813,7 +1813,7 @@ export default function App() {
 
             {walletBalance && (
               <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${walletBalance.low ? 'border-[#4A2127] bg-[#2E1519] text-[#F0A0AB]' : 'border-[#2C2326] bg-[#2B1A1E]/50 text-[#D07387]'}`}>
-                <div className="$()flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <span className="font-semibold">PayHero service wallet balance</span>
                   <span className="font-semibold">{walletBalance.currency} {walletBalance.available_balance.toLocaleString()}</span>
                 </div>
