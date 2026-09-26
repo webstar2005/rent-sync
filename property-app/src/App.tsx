@@ -24,6 +24,13 @@ import { BulkTenantImport } from './components/BulkTenantImport';
 
 type Mode = 'login' | 'register';
 
+// Every amount in this product is Kenyan shillings. Formatting in one place keeps the symbol
+// consistent and groups thousands, which matters once a landlord is looking at six figures of rent.
+function kes(value: number | string | null | undefined): string {
+  const amount = Number(value ?? 0);
+  return `KES ${amount.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export default function App() {
   const [mode, setMode] = useState<Mode>('login');
   const [gsiReady, setGsiReady] = useState(false);
@@ -265,7 +272,7 @@ export default function App() {
     try {
       const result = await requestInvoicePayment(invoice.id);
       setPaymentRequestNotice(
-        `STK prompt sent to ${result.tenant_name} (${result.phone}) for $${Number(result.amount).toFixed(2)} ` +
+        `STK prompt sent to ${result.tenant_name} (${result.phone}) for ${kes(result.amount)} ` +
           `on ${result.invoice_number} via ${result.channel.channel_type} ${result.channel.short_code}. ` +
           `It will appear under Payments received the moment PayHero confirms it.`
       );
@@ -1043,11 +1050,11 @@ export default function App() {
           </div>
           <div className="rounded-3xl border border-[#261F22] bg-[#201A1C] p-5 shadow-sm">
             <p className="text-sm font-medium text-[#A99FA3]">Collected</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">${totalCollected.toFixed(2)}</p>
+            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{kes(totalCollected)}</p>
           </div>
           <div className="rounded-3xl border border-[#261F22] bg-[#201A1C] p-5 shadow-sm">
             <p className="text-sm font-medium text-[#A99FA3]">Outstanding</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">${totalOutstanding.toFixed(2)}</p>
+            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{kes(totalOutstanding)}</p>
           </div>
         </section>
 
@@ -1081,8 +1088,8 @@ export default function App() {
         </section>
 
         <div className="grid gap-6 xl:grid-cols-2">
-          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-            <div className="mb-4 flex items-center justify-between">
+          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+            <div className="$(mb-4 )flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xl font-semibold text-[#F6F2F3]">Collections by property</h2>
               <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{properties.length} total</span>
             </div>
@@ -1093,7 +1100,7 @@ export default function App() {
               <div className="space-y-4">
                 {propertySummaries.map(({ property, totalUnits, paidCount, partialCount, overdueCount, collectedAmount, outstandingAmount, collectionRate }) => (
                   <div key={property.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-4 shadow-sm">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-semibold text-[#F6F2F3]">{property.name}</h3>
                         <p className="text-sm text-[#A99FA3]">{property.address}</p>
@@ -1113,11 +1120,11 @@ export default function App() {
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <div className="rounded-xl bg-[#221C1E] p-3">
                         <p className="text-[#A99FA3]">Collected</p>
-                        <p className="mt-1 font-semibold text-[#F6F2F3]">${collectedAmount.toFixed(2)}</p>
+                        <p className="mt-1 font-semibold text-[#F6F2F3]">{kes(collectedAmount)}</p>
                       </div>
                       <div className="rounded-xl bg-[#201A1C] p-3">
                         <p className="text-[#A99FA3]">Outstanding</p>
-                        <p className="mt-1 font-semibold text-[#F6F2F3]">${outstandingAmount.toFixed(2)}</p>
+                        <p className="mt-1 font-semibold text-[#F6F2F3]">{kes(outstandingAmount)}</p>
                       </div>
                     </div>
 
@@ -1201,7 +1208,7 @@ export default function App() {
             )}
           </section>
 
-          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
             <div className="mb-4 flex flex-col gap-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-xl font-semibold text-[#F6F2F3]">Needs attention</h2>
@@ -1266,7 +1273,7 @@ export default function App() {
                       >
                         {tenant.label}
                       </span>
-                      <p className="mt-2 text-sm font-medium text-[#F6F2F3]">${Number(tenant.amountDue).toFixed(2)}</p>
+                      <p className="mt-2 text-sm font-medium text-[#F6F2F3]">{kes(tenant.amountDue)}</p>
                     </div>
                   </button>
                 ))
@@ -1275,8 +1282,8 @@ export default function App() {
           </section>
         </div>
 
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="mb-4 flex items-center justify-between">
+        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+          <div className="$(mb-4 )flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-[#F6F2F3]">Paid vs unpaid by property</h2>
             <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{propertyPaymentStatus.length} properties</span>
           </div>
@@ -1326,8 +1333,8 @@ export default function App() {
           </div>
         </section>
 
-        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="mb-4 flex items-center justify-between">
+        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+          <div className="$(mb-4 )flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-[#F6F2F3]">Recent invoices</h2>
             <div className="flex items-center gap-3">
               <button
@@ -1342,7 +1349,28 @@ export default function App() {
             </div>
           </div>
           {invoiceNotice && <p className="mb-3 text-sm font-medium text-[#C65A70]">{invoiceNotice}</p>}
-          <div className="mt-4 overflow-hidden rounded-2xl border border-[#2C2326]">
+          <div className="mt-4 space-y-3 sm:hidden">
+            {recentInvoices.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1]">
+                No invoices yet
+              </p>
+            ) : (
+              recentInvoices.map((invoice) => (
+                <div key={invoice.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-semibold text-[#F6F2F3]">{invoice.invoice_number}</p>
+                    <span className="shrink-0 rounded-full bg-[#2B2116] px-2.5 py-1 text-xs font-semibold text-[#F0B84B]">
+                      {invoice.status}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-[#A99FA3]">{invoice.tenant_name || '—'}</p>
+                  <p className="mt-1 text-sm font-medium text-[#D9D2D6]">{kes(invoice.amount)}</p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-[#2C2326] sm:block">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-[#221C1E] text-[#B5ABB0]">
                 <tr>
@@ -1362,7 +1390,7 @@ export default function App() {
                     <tr key={invoice.id} className="border-t border-[#2A2225]">
                       <td className="px-3 py-2">{invoice.invoice_number}</td>
                       <td className="px-3 py-2">{invoice.tenant_name || '—'}</td>
-                      <td className="px-3 py-2">${Number(invoice.amount).toFixed(2)}</td>
+                      <td className="px-3 py-2">{kes(invoice.amount)}</td>
                       <td className="px-3 py-2">
                         <span className="rounded-full bg-[#2B2116] px-2.5 py-1 text-xs font-semibold text-[#F0B84B]">{invoice.status}</span>
                       </td>
@@ -1374,7 +1402,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold text-[#F6F2F3]">Payments received</h2>
@@ -1395,7 +1423,61 @@ export default function App() {
               </span>
             </div>
           </div>
-          <div className="mt-4 overflow-x-auto rounded-2xl border border-[#2C2326]">
+          {payments.length > 0 && (
+            <div className="mt-4 space-y-3 sm:hidden">
+              {payments.map((payment) => (
+                <div key={payment.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-semibold text-[#F6F2F3]">{kes(payment.amount)}</p>
+                    {payment.matched === false ? (
+                      <span className="shrink-0 rounded-full bg-[#3A1414] px-2.5 py-1 text-xs font-semibold text-[#F08A8A]">
+                        Needs reconciliation
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-[#152A1C] px-2.5 py-1 text-xs font-semibold text-[#6FCF97]">
+                        {payment.status}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-[#A99FA3]">
+                    {payment.tenant_name || 'Unidentified tenant'}
+                    {' · '}
+                    {payment.invoice_number || 'Not matched'}
+                  </p>
+                  <p className="mt-1 text-xs text-[#8A8085]">{new Date(payment.paid_at).toLocaleString()}</p>
+                  <dl className="mt-3 space-y-1 text-sm">
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[#A99FA3]">Method</dt>
+                      <dd className="text-right capitalize text-[#D9D2D6]">
+                        {String(payment.payment_method).replace(/_/g, ' ')}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[#A99FA3]">Channel</dt>
+                      <dd className="text-right text-[#D9D2D6]">
+                        {payment.channel_short_code || '—'}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[#A99FA3]">Reference</dt>
+                      <dd className="truncate text-right text-[#D9D2D6]">
+                        {payment.reference || payment.transaction_ref || '—'}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {payments.length === 0 && (
+            <p className="mt-4 rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1] sm:hidden">
+              No payments recorded yet. They appear here the moment a tenant pays through your registered
+              PayHero channel.
+            </p>
+          )}
+
+          <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-[#2C2326] sm:block">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-[#221C1E] text-[#B5ABB0]">
                 <tr>
@@ -1428,7 +1510,7 @@ export default function App() {
                         {payment.invoice_number || <span className="text-[#A49DA1]">Not matched</span>}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 font-medium text-[#F6F2F3]">
-                        ${Number(payment.amount).toFixed(2)}
+                        {kes(payment.amount)}
                       </td>
                       <td className="px-3 py-2 capitalize text-[#D9D2D6]">
                         {String(payment.payment_method).replace(/_/g, ' ')}
@@ -1458,8 +1540,8 @@ export default function App() {
           </div>
         </div>
 
-        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="mb-4 flex items-center justify-between">
+        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+          <div className="$(mb-4 )flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-[#F6F2F3]">Payment alerts</h2>
             <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{reconciliationAlerts.length} entries</span>
           </div>
@@ -1469,7 +1551,7 @@ export default function App() {
             ) : (
               reconciliationAlerts.slice(0, 6).map((alert) => (
                 <div key={alert.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="font-semibold text-[#F6F2F3]">{alert.tenant_name || alert.invoice_number || 'Unknown tenant'}</p>
                     <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ${alert.match_status === 'unmatched' ? 'bg-[#33161B] text-[#F08E9B]' : alert.match_status === 'duplicate' || alert.match_status === 'manual_review' ? 'bg-[#2B2116] text-[#F0B84B]' : 'bg-[#14211B] text-[#4ADE80]'}`}>
                       {alert.match_status}
@@ -1487,7 +1569,7 @@ export default function App() {
           </div>
         </div>
 
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <h2 className="text-xl font-semibold text-[#F6F2F3]">Manual payment reconciliation</h2>
           <p className="mt-2 text-sm text-[#A99FA3]">Use this when a tenant pays by bank transfer or an unmatched mobile-money reference needs to be linked to the correct tenant.</p>
           <form className="mt-4 space-y-4" onSubmit={handleManualPaymentReconciliation}>
@@ -1576,7 +1658,7 @@ export default function App() {
           </form>
         </section>
 
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <h2 className="text-xl font-semibold text-[#F6F2F3]">Add property</h2>
           <form className="mt-4 space-y-4" onSubmit={handlePropertySubmit}>
             <div>
@@ -1645,15 +1727,15 @@ export default function App() {
         </section>
 
         <div className="mt-8 grid gap-6 xl:grid-cols-2">
-          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-            <div className="flex items-center justify-between gap-3">
+          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xl font-semibold text-[#F6F2F3]">Payment Channels (PayHero)</h2>
               <button type="button" onClick={loadPaymentChannels} className="rounded-full bg-[#2B1A1E] px-3 py-1.5 text-xs font-semibold text-[#C65A70]">Refresh</button>
             </div>
 
             {walletBalance && (
               <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${walletBalance.low ? 'border-[#4A2127] bg-[#2E1519] text-[#F0A0AB]' : 'border-[#2C2326] bg-[#2B1A1E]/50 text-[#D07387]'}`}>
-                <div className="flex items-center justify-between">
+                <div className="$()flex flex-wrap items-center justify-between gap-3">
                   <span className="font-semibold">PayHero service wallet balance</span>
                   <span className="font-semibold">{walletBalance.currency} {walletBalance.available_balance.toLocaleString()}</span>
                 </div>
@@ -1727,7 +1809,7 @@ export default function App() {
             )}
           </section>
 
-          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
             <h2 className="text-xl font-semibold text-[#F6F2F3]">Add tenant</h2>
             <form className="mt-4 space-y-4" onSubmit={handleTenantSubmit}>
               <div>
@@ -1803,11 +1885,11 @@ export default function App() {
                 </div>
                 <div className="rounded-2xl bg-[#221C1E] p-4">
                   <p className="text-xs uppercase tracking-[0.15em] text-[#B5ABB0]">Total due</p>
-                  <p className="mt-2 text-lg font-semibold text-[#F6F2F3]">${Number(selectedTenantSummary.amountDue).toFixed(2)}</p>
+                  <p className="mt-2 text-lg font-semibold text-[#F6F2F3]">{kes(selectedTenantSummary.amountDue)}</p>
                 </div>
                 <div className="rounded-2xl bg-[#221C1E] p-4">
                   <p className="text-xs uppercase tracking-[0.15em] text-[#B5ABB0]">Monthly rent</p>
-                  <p className="mt-2 text-lg font-semibold text-[#F6F2F3]">${Number(selectedTenant.monthly_rent).toFixed(2)}</p>
+                  <p className="mt-2 text-lg font-semibold text-[#F6F2F3]">{kes(selectedTenant.monthly_rent)}</p>
                 </div>
               </div>
 
@@ -1853,15 +1935,15 @@ export default function App() {
 
                         return (
                           <div key={invoice.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
                               <p className="font-semibold text-[#F6F2F3]">{invoice.invoice_number}</p>
                               <span className="rounded-full bg-[#2B1A1E] px-2 py-1 text-[11px] font-semibold text-[#C65A70] uppercase">
                                 {invoice.status}
                               </span>
                             </div>
                               <p className="mt-2 text-sm text-[#A99FA3]">Due: {invoice.due_date}</p>
-                              <p className="text-sm text-[#A99FA3]">Amount: ${Number(invoice.amount).toFixed(2)}</p>
-                              <p className="text-sm text-[#A99FA3]">Paid: ${invoicePaid.toFixed(2)}</p>
+                              <p className="text-sm text-[#A99FA3]">Amount: {kes(invoice.amount)}</p>
+                              <p className="text-sm text-[#A99FA3]">Paid: {kes(invoicePaid)}</p>
                               {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
                                 <button
                                   type="button"
@@ -1871,7 +1953,7 @@ export default function App() {
                                 >
                                   {requestingInvoiceId === invoice.id
                                     ? 'Sending prompt…'
-                                    : `Request $${(Number(invoice.amount) - invoicePaid).toFixed(2)} payment`}
+                                    : `Request ${kes(Number(invoice.amount) - invoicePaid)} payment`}
                                 </button>
                               )}
                             </div>
@@ -1894,8 +1976,8 @@ export default function App() {
                     ) : (
                       selectedTenantPayments.map((payment) => (
                         <div key={payment.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="font-semibold text-[#F6F2F3]">${Number(payment.amount).toFixed(2)}</p>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="font-semibold text-[#F6F2F3]">{kes(payment.amount)}</p>
                             <span className="rounded-full bg-[#14211B] px-2 py-1 text-[11px] font-semibold text-[#4ADE80] uppercase">
                               {payment.status}
                             </span>
@@ -1913,7 +1995,7 @@ export default function App() {
           </div>
         )}
 
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-[#F6F2F3]">Reports</h2>
@@ -1972,7 +2054,35 @@ export default function App() {
                   No arrears data. Generate invoices and let payments reconcile to see totals.
                 </p>
               ) : (
-                <div className="overflow-x-auto rounded-2xl border border-[#2C2326]">
+                <>
+                <div className="space-y-3 sm:hidden">
+                  {arrears.map((row) => (
+                    <div key={row.property_id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="font-semibold text-[#F6F2F3]">{row.property_name}</p>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${row.overdue_count > 0 ? 'bg-[#33161B] text-[#F08E9B]' : 'bg-[#14211B] text-[#4ADE80]'}`}>
+                          {row.overdue_count} overdue
+                        </span>
+                      </div>
+                      <dl className="mt-3 space-y-1 text-sm">
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-[#A99FA3]">Invoiced</dt>
+                          <dd className="text-right text-[#D9D2D6]">{kes(row.total_invoiced)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-[#A99FA3]">Paid</dt>
+                          <dd className="text-right text-[#D9D2D6]">{kes(row.total_paid)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-[#A99FA3]">Outstanding</dt>
+                          <dd className="text-right font-semibold text-[#C65A70]">{kes(row.outstanding)}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto rounded-2xl border border-[#2C2326] sm:block">
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-[#221C1E] text-[#B5ABB0]">
                       <tr>
@@ -1987,9 +2097,9 @@ export default function App() {
                       {arrears.map((row) => (
                         <tr key={row.property_id} className="border-t border-[#2A2225]">
                           <td className="px-3 py-2 font-medium text-[#F6F2F3]">{row.property_name}</td>
-                          <td className="px-3 py-2">${Number(row.total_invoiced).toFixed(2)}</td>
-                          <td className="px-3 py-2">${Number(row.total_paid).toFixed(2)}</td>
-                          <td className="px-3 py-2 font-semibold text-[#C65A70]">${Number(row.outstanding).toFixed(2)}</td>
+                          <td className="px-3 py-2">{kes(row.total_invoiced)}</td>
+                          <td className="px-3 py-2">{kes(row.total_paid)}</td>
+                          <td className="px-3 py-2 font-semibold text-[#C65A70]">{kes(row.outstanding)}</td>
                           <td className="px-3 py-2">
                             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${row.overdue_count > 0 ? 'bg-[#33161B] text-[#F08E9B]' : 'bg-[#14211B] text-[#4ADE80]'}`}>
                               {row.overdue_count}
@@ -2000,6 +2110,7 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
 
@@ -2008,7 +2119,34 @@ export default function App() {
               {collectionRate.length === 0 ? (
                 <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1]">No monthly collection data yet.</p>
               ) : (
-                <div className="overflow-x-auto rounded-2xl border border-[#2C2326]">
+                <>
+                <div className="space-y-3 sm:hidden">
+                  {[...collectionRate].reverse().map((row) => {
+                    const rate = Number(row.collection_rate_pct);
+                    return (
+                      <div key={row.month} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <p className="font-semibold text-[#F6F2F3]">{row.month}</p>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${rate >= 90 ? 'bg-[#14211B] text-[#4ADE80]' : rate >= 70 ? 'bg-[#2B2116] text-[#F0B84B]' : 'bg-[#33161B] text-[#F08E9B]'}`}>
+                            {rate.toFixed(1)}%
+                          </span>
+                        </div>
+                        <dl className="mt-3 space-y-1 text-sm">
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-[#A99FA3]">Invoiced</dt>
+                            <dd className="text-right text-[#D9D2D6]">{kes(row.invoiced)}</dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-[#A99FA3]">Collected</dt>
+                            <dd className="text-right text-[#D9D2D6]">{kes(row.collected)}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="hidden overflow-x-auto rounded-2xl border border-[#2C2326] sm:block">
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-[#221C1E] text-[#B5ABB0]">
                       <tr>
@@ -2022,8 +2160,8 @@ export default function App() {
                       {[...collectionRate].reverse().map((row) => (
                         <tr key={row.month} className="border-t border-[#2A2225]">
                           <td className="px-3 py-2 font-medium text-[#F6F2F3]">{row.month}</td>
-                          <td className="px-3 py-2">${Number(row.invoiced).toFixed(2)}</td>
-                          <td className="px-3 py-2">${Number(row.collected).toFixed(2)}</td>
+                          <td className="px-3 py-2">{kes(row.invoiced)}</td>
+                          <td className="px-3 py-2">{kes(row.collected)}</td>
                           <td className="px-3 py-2">
                             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${Number(row.collection_rate_pct) >= 90 ? 'bg-[#14211B] text-[#4ADE80]' : Number(row.collection_rate_pct) >= 70 ? 'bg-[#2B2116] text-[#F0B84B]' : 'bg-[#33161B] text-[#F08E9B]'}`}>
                               {Number(row.collection_rate_pct).toFixed(1)}%
@@ -2034,6 +2172,7 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
           </div>
@@ -2080,7 +2219,37 @@ export default function App() {
             </div>
 
             {tenantStatement ? (
-              <div className="mt-3 overflow-x-auto rounded-2xl border border-[#2C2326] bg-[#161112]">
+              <>
+                <div className="mt-3 space-y-3 sm:hidden">
+                  {tenantStatement.statement.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1]">
+                      No activity for this tenant yet.
+                    </p>
+                  ) : (
+                    tenantStatement.statement.map((entry, index) => (
+                      <div
+                        key={`${entry.ref_number}-${index}`}
+                        className={`rounded-2xl border border-[#2C2326] p-3 ${entry.type === 'invoice' ? 'bg-[#201A1C]' : 'bg-[#161112]'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${entry.type === 'invoice' ? 'bg-[#2B1A1E] text-[#C65A70]' : 'bg-[#14211B] text-[#4ADE80]'}`}>
+                            {entry.type}
+                          </span>
+                          <span className="text-right text-sm font-semibold text-[#F6F2F3]">
+                            {Number(entry.amount) > 0 ? '+' : ''}
+                            {kes(entry.amount)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm text-[#D9D2D6]">{entry.ref_number}</p>
+                        <p className="mt-1 text-xs text-[#8A8085]">
+                          {new Date(entry.occurred_at).toLocaleDateString()} · balance {kes(entry.running_balance)}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-[#2C2326] bg-[#161112] sm:block">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-[#221C1E] text-[#B5ABB0]">
                     <tr>
@@ -2104,21 +2273,25 @@ export default function App() {
                           </td>
                           <td className="px-3 py-2">{entry.ref_number}</td>
                           <td className="px-3 py-2">{new Date(entry.occurred_at).toLocaleDateString()}</td>
-                          <td className="px-3 py-2">{Number(entry.amount) > 0 ? '+' : ''}${Number(entry.amount).toFixed(2)}</td>
-                          <td className="px-3 py-2 font-semibold text-[#F6F2F3]">${Number(entry.running_balance).toFixed(2)}</td>
+                            <td className="px-3 py-2">
+                              {Number(entry.amount) > 0 ? '+' : ''}
+                              {kes(entry.amount)}
+                            </td>
+                          <td className="px-3 py-2 font-semibold text-[#F6F2F3]">{kes(entry.running_balance)}</td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
               </div>
+              </>
             ) : (
               <p className="mt-3 text-sm text-[#A49DA1]">Select a tenant to view their full invoice + payment history with running balance.</p>
             )}
           </div>
         </section>
 
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <h2 className="text-xl font-semibold text-[#F6F2F3]">Maintenance</h2>
           <form className="mt-4 grid gap-4 lg:grid-cols-2" onSubmit={handleMaintenanceSubmit}>
             <div>
@@ -2201,7 +2374,7 @@ export default function App() {
                 const isEscalated = item.priority === 'urgent' && item.status !== 'resolved' && item.status !== 'closed' && Date.now() - new Date(item.created_at).getTime() > 48 * 3600 * 1000;
                 return (
                   <div key={item.id} className={`rounded-xl border p-4 ${isEscalated ? 'border-[#4A2127] bg-[#2E1519]' : 'border-[#2A2225] bg-[#161112]'}`}>
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <h3 className="font-semibold text-ink">{item.title} {isEscalated && <span className="ml-2 rounded-full bg-red-600 px-2 py-0.5 text-xs text-white">Escalated</span>}</h3>
                         <p className="text-sm text-[#A49DA1]">{item.property_name || 'Property'} • {item.tenant_name || 'No tenant'} — isolated to your properties</p>
