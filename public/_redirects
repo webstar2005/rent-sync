@@ -1,0 +1,6 @@
+# Cloudflare Pages redirects for the static export (next.config.ts uses output: "export",
+# so next.config redirects() is unavailable - no server to handle them).
+#
+# /pricing was published and indexed, then removed because the site does not handle
+# pricing. A 301 keeps existing links and search equity instead of a hard 404.
+/pricing /features 301

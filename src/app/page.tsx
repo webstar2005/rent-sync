@@ -14,7 +14,6 @@ export default function Home() {
         <Hero />
         <RoleBenefitsTabs />
         <FeatureGrid />
-        {/* Pricing removed for single-landlord sale — kept in repo at /pricing but not shown on homepage */}
         <CtaBanner />
         <FaqAccordion limit={5} />
       </main>
