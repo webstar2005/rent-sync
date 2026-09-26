@@ -4,13 +4,13 @@ import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireOwnerOrAdmin } from '../middleware/role.js';
 import { channelLimiter } from '../middleware/rateLimit.js';
-import { registerChannel, listChannels, getServiceWalletBalance, lowBalanceThreshold, payheroBaseUrl, normalizePhone } from '../services/payhero.js';
+import { registerChannel, listChannels, getServiceWalletBalance, lowBalanceThreshold, payheroBaseUrl } from '../services/payhero.js';
 import { logger, alertError } from '../utils/logger.js';
 
 const router = express.Router();
 
 const channelSchema = z.object({
-  channel_type: z.enum(['paybill', 'till', 'bank', 'send_money'], { message: 'channel_type must be paybill, till, bank or send_money' }),
+  channel_type: z.enum(['paybill', 'till', 'bank'], { message: 'channel_type must be paybill, till or bank' }),
   short_code: z.string().min(4, 'short_code must be at least 4 characters'),
   account_number: z.string().optional(),
   description: z.string().max(120).optional(),
@@ -44,42 +44,6 @@ router.post('/', channelLimiter, async (req, res) => {
   try {
     const payload = channelSchema.parse(req.body);
     const ownerId = req.user.sub;
-
-    // Send Money is a local-only channel: the landlord's own mobile-money number that tenants send
-    // rent to. PayHero's registration endpoint only accepts paybill/till/bank, so nothing is sent
-    // upstream. Store the number normalized to its last 9 digits so callback matching can compare it
-    // against a normalized recipient phone (see payheroWebhook.routes.js resolveChannel).
-    if (payload.channel_type === 'send_money') {
-      const digits = normalizePhone(payload.short_code);
-      if (!digits || digits.length !== 9) {
-        return res.status(400).json({ message: 'Send Money needs a valid receiving number, e.g. 0712345678 or +254712345678' });
-      }
-
-      const existingSendMoney = await query(
-        `SELECT * FROM payment_channels WHERE owner_id = $1 AND short_code = $2 AND channel_type = 'send_money'`,
-        [ownerId, digits]
-      );
-      if (existingSendMoney.rows.length > 0) {
-        return res.json(existingSendMoney.rows[0]);
-      }
-
-      const inserted = await query(
-        `INSERT INTO payment_channels (
-           owner_id, channel_type, short_code, account_number, payhero_channel_id, description,
-           is_active, verification_status, payhero_meta, created_at
-         ) VALUES ($1, 'send_money', $2, $3, NULL, $4, TRUE, 'active', $5, NOW())
-         RETURNING *`,
-        [
-          ownerId,
-          digits,
-          payload.account_number?.trim() || null,
-          payload.description ?? null,
-          { local_only: true, source: 'send_money', receiving_number: digits },
-        ]
-      );
-
-      return res.status(201).json(inserted.rows[0]);
-    }
 
     const existing = await query(
       `SELECT * FROM payment_channels WHERE owner_id = $1 AND short_code = $2 AND channel_type = $3`,
@@ -187,12 +151,6 @@ router.post('/:channelId/sync', async (req, res) => {
       return res.status(403).json({ message: 'You do not own this payment channel' });
     }
     const channel = owned.rows[0];
-
-    // Send Money channels are local-only and never registered with PayHero, so there is nothing to
-    // sync — without this guard the short-code lookup below would report a confusing "not registered".
-    if (channel.channel_type === 'send_money') {
-      return res.status(400).json({ message: 'Send Money numbers are managed locally and have no PayHero status to sync' });
-    }
 
     const phChannels = await listChannels();
     const list = Array.isArray(phChannels) ? phChannels : phChannels?.payment_channels ?? phChannels?.data ?? [];

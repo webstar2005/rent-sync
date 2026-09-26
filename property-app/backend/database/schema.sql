@@ -60,14 +60,12 @@ CREATE TABLE IF NOT EXISTS invoices (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- PayHero payment channels — one row per landlord-owned channel (Paybill / Till / Bank / Send Money).
+-- PayHero payment channels — one row per landlord-owned channel (Paybill / Till / Bank).
 -- Scoped to the owner (landlord) user; never hard-deleted once it has payment history — deactivate instead.
--- 'send_money' rows are local-only (PayHero has no such channel_type) and hold the landlord's
--- receiving number in short_code, normalized to its last 9 digits. See migrations/006.
 CREATE TABLE IF NOT EXISTS payment_channels (
   id SERIAL PRIMARY KEY,
   owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  channel_type TEXT NOT NULL CHECK (channel_type IN ('paybill', 'till', 'bank', 'send_money')),
+  channel_type TEXT NOT NULL CHECK (channel_type IN ('paybill', 'till', 'bank')),
   short_code TEXT NOT NULL,
   account_number TEXT,
   payhero_channel_id TEXT,
@@ -170,7 +168,6 @@ CREATE INDEX IF NOT EXISTS idx_reconciliation_events_owner_created ON payment_re
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_channels_payhero_channel_id ON payment_channels(payhero_channel_id) WHERE payhero_channel_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_payment_channels_owner_id ON payment_channels(owner_id);
 CREATE INDEX IF NOT EXISTS idx_payment_channels_short_code ON payment_channels(short_code);
-CREATE INDEX IF NOT EXISTS idx_payment_channels_send_money_phone ON payment_channels (RIGHT(regexp_replace(short_code, '[^0-9]', '', 'g'), 9)) WHERE channel_type = 'send_money' AND is_active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_payhero_callback_log_status ON payhero_callback_log(status);
 CREATE INDEX IF NOT EXISTS idx_payhero_callback_log_transaction_ref ON payhero_callback_log(transaction_ref);
 CREATE INDEX IF NOT EXISTS idx_payhero_callback_log_created_at ON payhero_callback_log(created_at DESC);

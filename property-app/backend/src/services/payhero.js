@@ -257,37 +257,6 @@ export function extractPhone(payload) {
   return phone ? String(phone) : null;
 }
 
-// Send Money has no paybill/till short code — the landlord is identified by the number the money was
-// sent TO. PayHero's Send Money callback shape is not documented, so this deliberately looks only at
-// receiver-shaped keys (never the sender `Phone`, which belongs to the tenant) and takes the first
-// value that normalizes to a full 9-digit number. Returns null rather than guessing.
-const RECIPIENT_PHONE_KEYS = [
-  'receiverphone',
-  'receivermsisdn',
-  'receiver_phone',
-  'recipientphone',
-  'recipientmsisdn',
-  'recipient_phone',
-  'receiver',
-  'recipient',
-  'receiver_number',
-  'to_number',
-];
-
-export function extractRecipientPhone(payload) {
-  for (const target of [payload?.response, payload]) {
-    if (!target || typeof target !== 'object') continue;
-    for (const key of Object.keys(target)) {
-      if (!RECIPIENT_PHONE_KEYS.includes(key.toLowerCase())) continue;
-      const value = target[key];
-      if (value === null || value === undefined || value === '') continue;
-      const norm = normalizePhone(value);
-      if (norm && norm.length === 9) return norm;
-    }
-  }
-  return null;
-}
-
 export function extractReference(payload) {
   const response = extractResponse(payload);
   return response?.ExternalReference ?? response?.external_reference ?? response?.BillRefNumber ?? response?.AccountReference ?? null;

@@ -84,7 +84,7 @@ export default function App() {
   const [reconciliationAlerts, setReconciliationAlerts] = useState<ReconciliationAlert[]>([]);
   const [reconciliationSummary, setReconciliationSummary] = useState({ unmatched_count: 0, duplicate_count: 0, manual_review_count: 0, matched_count: 0 });
   const [paymentChannels, setPaymentChannels] = useState<PaymentChannel[]>([]);
-  const [paymentChannelForm, setPaymentChannelForm] = useState({ channel_type: 'paybill' as 'paybill' | 'till' | 'bank' | 'send_money', short_code: '', account_number: '', description: '' });
+  const [paymentChannelForm, setPaymentChannelForm] = useState({ channel_type: 'paybill' as 'paybill' | 'till' | 'bank', short_code: '', account_number: '', description: '' });
   const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null);
   const [paymentChannelError, setPaymentChannelError] = useState('');
   const [paymentChannelLoading, setPaymentChannelLoading] = useState(false);
@@ -1514,31 +1514,15 @@ export default function App() {
             <form className="mt-4 grid grid-cols-2 gap-3" onSubmit={handlePaymentChannelSubmit}>
               <div>
                 <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Channel type</label>
-                <select value={paymentChannelForm.channel_type} onChange={(event) => setPaymentChannelForm({ ...paymentChannelForm, channel_type: event.target.value as 'paybill' | 'till' | 'bank' | 'send_money' })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2">
+                <select value={paymentChannelForm.channel_type} onChange={(event) => setPaymentChannelForm({ ...paymentChannelForm, channel_type: event.target.value as 'paybill' | 'till' | 'bank' })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2">
                   <option value="paybill">Paybill</option>
                   <option value="till">Till</option>
                   <option value="bank">Bank</option>
-                  <option value="send_money">Send Money (phone number)</option>
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">
-                  {paymentChannelForm.channel_type === 'send_money'
-                    ? 'Your receiving phone number'
-                    : 'Short code / Paybill / Till / Bank number'}
-                </label>
-                <input
-                  value={paymentChannelForm.short_code}
-                  onChange={(event) => setPaymentChannelForm({ ...paymentChannelForm, short_code: event.target.value })}
-                  placeholder={paymentChannelForm.channel_type === 'send_money' ? 'e.g. 0712345678' : 'e.g. 522522'}
-                  inputMode={paymentChannelForm.channel_type === 'send_money' ? 'tel' : 'text'}
-                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
-                />
-                {paymentChannelForm.channel_type === 'send_money' && (
-                  <p className="mt-1 text-xs text-[#8A7F83]">
-                    Tenants can send rent straight to this number. We use it to match incoming Send Money payments to your account.
-                  </p>
-                )}
+                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Short code / Paybill / Till / Bank number</label>
+                <input value={paymentChannelForm.short_code} onChange={(event) => setPaymentChannelForm({ ...paymentChannelForm, short_code: event.target.value })} placeholder="e.g. 522522" className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Account number (bank / paybill account — optional)</label>
@@ -1550,16 +1534,14 @@ export default function App() {
               </div>
               <div className="col-span-2">
                 <button type="submit" disabled={paymentChannelLoading || !paymentChannelForm.short_code.trim()} className="w-full rounded-xl bg-[#7A1428] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] disabled:cursor-not-allowed disabled:opacity-60">
-                  {paymentChannelLoading
-                    ? paymentChannelForm.channel_type === 'send_money' ? 'Saving...' : 'Registering with PayHero...'
-                    : 'Add payment channel'}
+                  {paymentChannelLoading ? 'Registering with PayHero...' : 'Add payment channel'}
                 </button>
                 {paymentChannelError && <p className="mt-2 text-xs text-[#F47C8E]">{paymentChannelError}</p>}
               </div>
             </form>
 
             {paymentChannels.length === 0 ? (
-              <p className="mt-4 text-sm text-[#A49DA1]">No payment channels yet. Add a Paybill, Till, or Bank channel — PayHero requires an ownership-confirmation step before incoming payments activate. You can also add a Send Money number to receive rent straight to your phone.</p>
+              <p className="mt-4 text-sm text-[#A49DA1]">No payment channels yet. Add a Paybill, Till, or Bank channel above — PayHero requires an ownership-confirmation step before incoming payments activate.</p>
             ) : (
               <ul className="mt-4 space-y-2">
                 {paymentChannels.map((channel) => (
@@ -1572,19 +1554,13 @@ export default function App() {
                         {!channel.is_active && <span className="rounded-full bg-[#2A2225] px-2 py-0.5 text-xs font-semibold text-[#B0A8AD]">deactivated</span>}
                       </div>
                       <p className="mt-1 truncate text-xs text-[#A49DA1]">
-                        {channel.channel_type === 'send_money' ? 'Receiving number' : 'Short code'}: {channel.short_code}
-                        {channel.channel_type === 'send_money'
-                          ? ' · matched on incoming Send Money payments'
-                          : channel.payhero_channel_id
-                            ? ` · PayHero channel id: ${channel.payhero_channel_id}`
-                            : ' · not yet confirmed by PayHero'}
+                        Short code: {channel.short_code}
+                        {channel.payhero_channel_id ? ` · PayHero channel id: ${channel.payhero_channel_id}` : ' · not yet confirmed by PayHero'}
                         {channel.account_number ? ` · Acct: ${channel.account_number}` : ''}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {channel.channel_type !== 'send_money' && (
-                        <button type="button" onClick={() => handlePaymentChannelSync(channel.id)} className="rounded-full border border-[#2C2326] px-3 py-1 text-xs font-semibold text-[#D07387]">Sync status</button>
-                      )}
+                      <button type="button" onClick={() => handlePaymentChannelSync(channel.id)} className="rounded-full border border-[#2C2326] px-3 py-1 text-xs font-semibold text-[#D07387]">Sync status</button>
                       <button
                         type="button"
                         onClick={() => handlePaymentChannelToggle(channel)}
