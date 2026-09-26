@@ -96,8 +96,9 @@ describe('PayHero webhook → payment pipeline', () => {
     for (const row of rejected) {
       assert.doesNotMatch(JSON.stringify(row), /wrong-secret-value/);
       assert.doesNotMatch(JSON.stringify(row), new RegExp(SECRET));
-      assert.match(row.processing_error, /sha256:/, 'presented value should be fingerprinted, not stored');
     }
+    // A value that WAS presented is recorded as a fingerprint, never in the clear.
+    assert.match(rejected[1].processing_error, /sha256:/);
   });
 
   it('verification: a valid secret is still rejected when the IP allowlist excludes the caller', async () => {
