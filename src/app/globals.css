@@ -23,6 +23,14 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-2xl: 20px;
+
+  /* Elevation — these have to live here, not in tailwind.config.ts. Tailwind v4 does
+     not auto-load a config file, so the boxShadow block there was dead and every
+     shadow-card / shadow-cta / shadow-soft class silently rendered nothing. */
+  --shadow-soft: 0 2px 10px rgba(13, 13, 13, 0.06);
+  --shadow-card: 0 4px 24px rgba(13, 13, 13, 0.06);
+  --shadow-card-hover: 0 8px 32px rgba(13, 13, 13, 0.10);
+  --shadow-cta: 0 4px 14px rgba(122, 20, 40, 0.25);
 }
 
 /* Base resets */
