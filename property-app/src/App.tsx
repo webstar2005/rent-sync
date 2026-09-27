@@ -1142,7 +1142,7 @@ export default function App() {
             <p className="mt-2 text-sm leading-relaxed text-[#C9C0C4]">
               As a landlord, start by adding a property (name, address, units, rent due day). Each property is independent — tenants, invoices, and payments are scoped to that property. After you add one, the “Collections by property” and “Paid vs unpaid” cards below will populate, and you can import tenants in bulk.
             </p>
-            <p className="mt-2 text-xs text-[#A49DA1]">Tip: Due day 5th means invoices auto-generate at month-end for the 5th, so you can collect from the 1st.</p>
+            <p className="mt-2 text-xs text-[#A49DA1]">Tip: due day 5th means invoices are dated to the 5th, so you can start collecting from the 1st. Use Generate invoices below to create this month's.</p>
           </section>
         )}
 
