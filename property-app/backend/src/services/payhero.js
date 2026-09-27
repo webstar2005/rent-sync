@@ -116,21 +116,6 @@ export function getServiceWalletBalance() {
   return phFetch('/wallets?wallet_type=service_wallet');
 }
 
-// Initiate an M-Pesa STK push to a customer's phone through a registered channel.
-// Shape confirmed from PayHero's official PHP client: POST /payments (base /api/v2).
-// callbackUrl is optional per-request; it overrides the account-level callback for this transaction.
-export function initiateStkPush({ amount, phoneNumber, channelId, externalReference, callbackUrl }) {
-  const body = {
-    amount: Number(amount),
-    phone_number: String(phoneNumber).trim(),
-    channel_id: Number(channelId),
-    external_reference: String(externalReference).trim(),
-    provider: 'm-pesa',
-  };
-  if (callbackUrl) body.callback_url = String(callbackUrl).trim();
-  return phFetch('/payments', { method: 'POST', body: JSON.stringify(body) });
-}
-
 export function getTransactionStatus(reference) {
   return phFetch(`/transaction-status?reference=${encodeURIComponent(reference)}`);
 }

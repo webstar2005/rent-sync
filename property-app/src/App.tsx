@@ -6,9 +6,9 @@ import { getApiHealth } from './lib/api/client';
 import { createProperty, getProperties, updateProperty, deleteProperty, type Property } from './lib/api/properties';
 import { createTenant, deleteTenant, getTenants, updateTenantStatus, type Tenant } from './lib/api/tenants';
 import { getInvoices, generateInvoices, type Invoice } from './lib/api/invoices';
-import { getPayments, requestInvoicePayment, createPayment, type Payment } from './lib/api/payments';
+import { getPayments, createPayment, type Payment } from './lib/api/payments';
 import { createMaintenanceRequest, getMaintenanceRequests, updateMaintenanceRequest, deleteMaintenanceRequest, type MaintenanceRequest } from './lib/api/maintenance';
-import { getPayHeroWalletBalance, createPaymentChannel, getPaymentChannels, syncPaymentChannel, updatePaymentChannel, type PaymentChannel, type WalletBalance } from './lib/api/channels';
+import { createPaymentChannel, getPaymentChannels, syncPaymentChannel, updatePaymentChannel, type PaymentChannel } from './lib/api/channels';
 import { getReconciliationAlerts, getReconciliationSummary, reconcilePayment, type ReconciliationAlert } from './lib/api/reconciliation';
 import {
   getArrears,
@@ -49,8 +49,9 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [requestingInvoiceId, setRequestingInvoiceId] = useState<number | null>(null);
-  const [paymentRequestNotice, setPaymentRequestNotice] = useState('');
+  // Confirmation for a payment the landlord recorded by hand. Not an STK prompt notice - Rent Sync
+  // does not prompt tenants.
+  const [recordPaymentNotice, setRecordPaymentNotice] = useState('');
 
   // Manual payment capture. Most rent in Kenya arrives as M-Pesa Send Money straight into the
   // landlord's own number, which no payment provider can see and therefore never calls us about.
@@ -114,7 +115,6 @@ export default function App() {
   const [reconciliationSummary, setReconciliationSummary] = useState({ unmatched_count: 0, duplicate_count: 0, manual_review_count: 0, matched_count: 0 });
   const [paymentChannels, setPaymentChannels] = useState<PaymentChannel[]>([]);
   const [paymentChannelForm, setPaymentChannelForm] = useState({ channel_type: 'paybill' as 'paybill' | 'till' | 'bank', short_code: '', account_number: '', description: '' });
-  const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null);
   const [paymentChannelError, setPaymentChannelError] = useState('');
   const [paymentChannelLoading, setPaymentChannelLoading] = useState(false);
   const [arrears, setArrears] = useState<ArrearsRow[]>([]);
@@ -429,7 +429,7 @@ export default function App() {
       // Reload so the invoice status, the KPIs and the payments list all reflect the new row.
       await loadProperties(true);
       setLastUpdated(new Date());
-      setPaymentRequestNotice(
+      setRecordPaymentNotice(
         `Recorded ${kes(amount)} against ${invoice.invoice_number}. The invoice is now ` +
           `${amount + paidSoFar >= Number(invoice.amount) ? 'paid in full' : 'part paid'}.`
       );
@@ -438,23 +438,6 @@ export default function App() {
       setRecordError(error instanceof Error ? error.message : 'Could not save the payment');
     } finally {
       setSavingPayment(false);
-    }
-  }
-
-  async function handleRequestPayment(invoice: Invoice) {
-    setRequestingInvoiceId(invoice.id);
-    setPaymentRequestNotice('');
-    try {
-      const result = await requestInvoicePayment(invoice.id);
-      setPaymentRequestNotice(
-        `STK prompt sent to ${result.tenant_name} (${result.phone}) for ${kes(result.amount)} ` +
-          `on ${result.invoice_number} via ${result.channel.channel_type} ${result.channel.short_code}. ` +
-          `It will appear under Payments received the moment PayHero confirms it.`
-      );
-    } catch (error) {
-      setPaymentRequestNotice(error instanceof Error ? error.message : 'Could not request payment');
-    } finally {
-      setRequestingInvoiceId(null);
     }
   }
 
@@ -615,16 +598,16 @@ export default function App() {
     }
   }
 
-  async function loadPaymentChannels() {
-    try {
-      const [channelsRes, walletRes] = await Promise.allSettled([getPaymentChannels(), getPayHeroWalletBalance()]);
-      if (channelsRes.status === 'fulfilled') setPaymentChannels(channelsRes.value);
-      if (channelsRes.status === 'rejected') console.warn('payment channels failed', channelsRes.reason);
-      if (walletRes.status === 'fulfilled') setWalletBalance(walletRes.value);
-      if (walletRes.status === 'rejected') console.warn('PayHero wallet balance failed', walletRes.reason);
-    } catch (err) {
-      console.error(err);
-    }
+  // Returns the promise rather than being async: the callers that await this need the fetch to have
+  // actually finished before they read the channel list back.
+  function loadPaymentChannels() {
+    // The shared PayHero service wallet is deliberately NOT fetched for landlords. It is one
+    // platform-wide prepaid balance, not the landlord's money, and since Rent Sync does not prompt
+    // tenants, nothing a landlord does in this product can move it. Surfacing it only ever
+    // confused landlords and leaked a shared business figure.
+    return getPaymentChannels()
+      .then(setPaymentChannels)
+      .catch((reason) => console.warn('payment channels failed', reason));
   }
 
   async function loadReports() {
@@ -1941,18 +1924,6 @@ export default function App() {
               <button type="button" onClick={loadPaymentChannels} className="rounded-full bg-[#2B1A1E] px-3 py-1.5 text-xs font-semibold text-[#C65A70]">Refresh</button>
             </div>
 
-            {walletBalance && (
-              <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${walletBalance.low ? 'border-[#4A2127] bg-[#2E1519] text-[#F0A0AB]' : 'border-[#2C2326] bg-[#2B1A1E]/50 text-[#D07387]'}`}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="font-semibold">PayHero service wallet balance</span>
-                  <span className="font-semibold">{walletBalance.currency} {walletBalance.available_balance.toLocaleString()}</span>
-                </div>
-                {walletBalance.low
-                  ? <p className="mt-1 text-xs font-medium">Low balance — PayHero uses a prepaid wallet; a depleted wallet silently blocks new transactions. Top it up in the PayHero portal.</p>
-                  : <p className="mt-1 text-xs text-[#8C8287]">Prepaid wallet threshold for warning: {walletBalance.currency} {walletBalance.threshold.toLocaleString()}.</p>}
-              </div>
-            )}
-
             <form className="mt-4 grid grid-cols-2 gap-3" onSubmit={handlePaymentChannelSubmit}>
               <div>
                 <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Channel type</label>
@@ -2154,124 +2125,114 @@ export default function App() {
                               <p className="text-sm text-[#A99FA3]">Paid: {kes(invoicePaid)}</p>
                               {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
                                 <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRequestPayment(invoice)}
-                                    disabled={requestingInvoiceId === invoice.id}
-                                    className="mt-3 w-full rounded-xl bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    {requestingInvoiceId === invoice.id
-                                      ? 'Sending prompt…'
-                                      : `Request ${kes(Number(invoice.amount) - invoicePaid)} payment`}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (recordingInvoiceId === invoice.id) {
-                                        closeRecordPayment();
-                                        return;
-                                      }
-                                      openRecordPayment(invoice, selectedTenant.id, Number(invoice.amount) - invoicePaid);
-                                    }}
-                                    disabled={savingPayment}
-                                    aria-expanded={recordingInvoiceId === invoice.id}
-                                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                                      recordingInvoiceId === invoice.id
-                                        ? 'border-[#7A3B4C] bg-[#2B1A1E] text-[#E8B4BF]'
-                                        : 'border-[#4A3339] bg-[#161112] text-[#CFC5CA] hover:border-[#7A3B4C]'
-                                    }`}
-                                  >
-                                    {recordingInvoiceId === invoice.id
-                                      ? 'Cancel recording'
-                                      : 'I already received this payment'}
-                                  </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (recordingInvoiceId === invoice.id) {
+                                      closeRecordPayment();
+                                      return;
+                                    }
+                                    openRecordPayment(invoice, selectedTenant.id, Number(invoice.amount) - invoicePaid);
+                                  }}
+                                  disabled={savingPayment}
+                                  aria-expanded={recordingInvoiceId === invoice.id}
+                                  className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                    recordingInvoiceId === invoice.id
+                                      ? 'border-[#7A3B4C] bg-[#2B1A1E] text-[#E8B4BF]'
+                                      : 'border-[#4A3339] bg-[#161112] text-[#CFC5CA] hover:border-[#7A3B4C]'
+                                  }`}
+                                >
+                                  {recordingInvoiceId === invoice.id
+                                    ? 'Cancel recording'
+                                    : 'I already received this payment'}
+                                </button>
 
-                                  {recordingInvoiceId === invoice.id && (
-                                    <form
-                                      onSubmit={(event) => handleSaveRecordedPayment(event, invoice)}
-                                      className="mt-3 space-y-3 rounded-xl border border-[#3A2E32] bg-[#1C1618] p-3"
-                                    >
-                                      <p className="text-xs text-[#A99FA3]">
-                                        For money that reached you outside a registered channel — M-Pesa Send
-                                        Money to your number, cash, or a bank transfer. There is no automatic
-                                        confirmation for these, so record it here.
+                                {recordingInvoiceId === invoice.id && (
+                                  <form
+                                    onSubmit={(event) => handleSaveRecordedPayment(event, invoice)}
+                                    className="mt-3 space-y-3 rounded-xl border border-[#3A2E32] bg-[#1C1618] p-3"
+                                  >
+                                    <p className="text-xs text-[#A99FA3]">
+                                      For money that reached you outside a registered channel — M-Pesa Send
+                                      Money to your number, cash, or a bank transfer. There is no automatic
+                                      confirmation for these, so record it here.
+                                    </p>
+
+                                    <div>
+                                      <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-amount-${invoice.id}`}>
+                                        Amount received (KES)
+                                      </label>
+                                      <input
+                                        id={`record-amount-${invoice.id}`}
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="0.01"
+                                        min="0"
+                                        value={recordAmount}
+                                        onChange={(event) => setRecordAmount(event.target.value)}
+                                        className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-method-${invoice.id}`}>
+                                        How did it arrive?
+                                      </label>
+                                      <select
+                                        id={`record-method-${invoice.id}`}
+                                        value={recordMethod}
+                                        onChange={(event) =>
+                                          setRecordMethod(event.target.value as typeof recordMethod)
+                                        }
+                                        className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
+                                      >
+                                        <option value="mobile_money">M-Pesa Send Money</option>
+                                        <option value="bank_transfer">Bank transfer</option>
+                                        <option value="cash">Cash</option>
+                                        <option value="card">Card</option>
+                                        <option value="other">Other</option>
+                                      </select>
+                                    </div>
+
+                                    <div>
+                                      <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-ref-${invoice.id}`}>
+                                        Reference (optional)
+                                      </label>
+                                      <input
+                                        id={`record-ref-${invoice.id}`}
+                                        type="text"
+                                        value={recordReference}
+                                        onChange={(event) => setRecordReference(event.target.value)}
+                                        placeholder="e.g. QJG7X4K2PL"
+                                        className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
+                                      />
+                                    </div>
+
+                                    {recordError && (
+                                      <p className="rounded-lg border border-[#4A2127] bg-[#2E1519] p-2 text-xs text-[#F0A0AB]">
+                                        {recordError}
                                       </p>
+                                    )}
 
-                                      <div>
-                                        <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-amount-${invoice.id}`}>
-                                          Amount received (KES)
-                                        </label>
-                                        <input
-                                          id={`record-amount-${invoice.id}`}
-                                          type="number"
-                                          inputMode="decimal"
-                                          step="0.01"
-                                          min="0"
-                                          value={recordAmount}
-                                          onChange={(event) => setRecordAmount(event.target.value)}
-                                          className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
-                                        />
-                                      </div>
-
-                                      <div>
-                                        <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-method-${invoice.id}`}>
-                                          How did it arrive?
-                                        </label>
-                                        <select
-                                          id={`record-method-${invoice.id}`}
-                                          value={recordMethod}
-                                          onChange={(event) =>
-                                            setRecordMethod(event.target.value as typeof recordMethod)
-                                          }
-                                          className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
-                                        >
-                                          <option value="mobile_money">M-Pesa Send Money</option>
-                                          <option value="bank_transfer">Bank transfer</option>
-                                          <option value="cash">Cash</option>
-                                          <option value="card">Card</option>
-                                          <option value="other">Other</option>
-                                        </select>
-                                      </div>
-
-                                      <div>
-                                        <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-ref-${invoice.id}`}>
-                                          Reference (optional)
-                                        </label>
-                                        <input
-                                          id={`record-ref-${invoice.id}`}
-                                          type="text"
-                                          value={recordReference}
-                                          onChange={(event) => setRecordReference(event.target.value)}
-                                          placeholder="e.g. QJG7X4K2PL"
-                                          className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
-                                        />
-                                      </div>
-
-                                      {recordError && (
-                                        <p className="rounded-lg border border-[#4A2127] bg-[#2E1519] p-2 text-xs text-[#F0A0AB]">
-                                          {recordError}
-                                        </p>
-                                      )}
-
-                                      <div className="flex gap-2">
-                                        <button
-                                          type="submit"
-                                          disabled={savingPayment}
-                                          className="flex-1 rounded-lg bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                          {savingPayment ? 'Saving…' : 'Save payment'}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={closeRecordPayment}
-                                          disabled={savingPayment}
-                                          className="rounded-lg border border-[#4A3339] bg-[#161112] px-3 py-2 text-sm font-medium text-[#CFC5CA] disabled:opacity-50"
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    </form>
-                                  )}
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="submit"
+                                        disabled={savingPayment}
+                                        className="flex-1 rounded-lg bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        {savingPayment ? 'Saving…' : 'Save payment'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={closeRecordPayment}
+                                        disabled={savingPayment}
+                                        className="rounded-lg border border-[#4A3339] bg-[#161112] px-3 py-2 text-sm font-medium text-[#CFC5CA] disabled:opacity-50"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </form>
+                                )}
                                 </>
                               )}
                             </div>
@@ -2279,9 +2240,9 @@ export default function App() {
                         })
                       )}
                     </div>
-                    {paymentRequestNotice && (
+                    {recordPaymentNotice && (
                       <p className="mt-3 rounded-2xl border border-[#3A2E32] bg-[#1C1618] p-3 text-sm text-[#CFC5CA]">
-                        {paymentRequestNotice}
+                        {recordPaymentNotice}
                       </p>
                     )}
                   </div>
