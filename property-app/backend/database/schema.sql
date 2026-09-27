@@ -39,8 +39,11 @@ CREATE TABLE IF NOT EXISTS payment_requests (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_requests_pending_code
-  ON payment_requests (mpesa_confirmation_code) WHERE status = 'pending';
+-- Unique across every row, not just pending ones: a Safaricom confirmation code is unique per
+-- transfer, so once it has been used - approved or rejected - it must not be claimable again.
+-- A pending-only index here would let one payment activate two accounts. See migrations/011.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_requests_code_unique
+  ON payment_requests (mpesa_confirmation_code);
 
 -- Properties owned or managed by a user
 CREATE TABLE IF NOT EXISTS properties (

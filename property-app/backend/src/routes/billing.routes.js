@@ -16,6 +16,10 @@ import { logger } from '../utils/logger.js';
 const router = express.Router();
 router.use(requireAuth);
 
+// Nobody legitimately has more than a couple of claims in flight - one payment, one code - so a
+// small ceiling is enough to stop the admin queue being flooded with noise from a single account.
+const MAX_PENDING_PER_USER = 3;
+
 const requestSchema = z.object({
   plan: z
     .string()
@@ -96,13 +100,24 @@ router.post('/request', generalLimiter, async (req, res) => {
       return res.status(409).json({ message: 'Your subscription is already active' });
     }
 
-    // The partial unique index is the real guarantee against one code switching on two accounts.
-    // Catching its violation here turns a 500 into an explanation.
+    // A code is usable at most once, ever. The unique index spans every row rather than only
+    // pending ones, so an already-approved or already-rejected code cannot be re-submitted by a
+    // second account to have one payment activate two subscriptions.
+    const pendingCount = await query(
+      `SELECT COUNT(*)::int AS n FROM payment_requests WHERE user_id = $1 AND status = 'pending'`,
+      [req.user.id]
+    );
+    if (pendingCount.rows[0].n >= MAX_PENDING_PER_USER) {
+      return res.status(429).json({
+        message: 'You already have payment claims waiting to be checked. Contact us if they are wrong.',
+      });
+    }
+
+    // Catching the unique index's violation here turns a 500 into an explanation.
     const inserted = await query(
       `INSERT INTO payment_requests (user_id, plan, amount, mpesa_confirmation_code)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (mpesa_confirmation_code) WHERE status = 'pending'
-       DO NOTHING
+       ON CONFLICT (mpesa_confirmation_code) DO NOTHING
        RETURNING id, plan, amount, mpesa_confirmation_code, created_at`,
       [req.user.id, plan.key, plan.amount, payload.mpesa_confirmation_code]
     );
@@ -110,7 +125,7 @@ router.post('/request', generalLimiter, async (req, res) => {
     if (inserted.rowCount === 0) {
       return res.status(409).json({
         message:
-          'That confirmation code has already been submitted and is waiting to be checked. If it was not you, contact us.',
+          'That confirmation code has already been submitted. If it was not you, contact us.',
       });
     }
 

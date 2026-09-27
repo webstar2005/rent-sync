@@ -162,9 +162,35 @@ test('one confirmation code cannot be claimed by two accounts', async () => {
   assert.match(second.body.message, /already been submitted/i);
 });
 
-test('a rejected claim frees the code to be submitted again', async () => {
+test('an APPROVED claim keeps the code blocked forever, not just while it is pending', async () => {
+  // The hole migration 011 closes. A pending-only unique index stopped protecting a code the
+  // moment an admin approved it, so one Send Money transfer could have been claimed - and
+  // activated - a second time by a different account.
   const a = await seedLandlord({ name: 'First', subscription: { status: 'unpaid' } });
-  const code = 'REUSEME12345';
+  const b = await seedLandlord({ name: 'Second', subscription: { status: 'unpaid' } });
+  const code = 'APPROVEDCODE1';
+
+  await request(app)
+    .post('/api/billing/request')
+    .set('Authorization', `Bearer ${a.token}`)
+    .send({ plan: 'basic', mpesa_confirmation_code: code })
+    .expect(201);
+
+  await pool.query(`UPDATE payment_requests SET status = 'approved', reviewed_at = NOW()`);
+
+  await request(app)
+    .post('/api/billing/request')
+    .set('Authorization', `Bearer ${b.token}`)
+    .send({ plan: 'basic', mpesa_confirmation_code: code })
+    .expect(409);
+});
+
+test('a rejected claim does NOT free the code to be claimed again', async () => {
+  // Reversed deliberately. A code an admin has already judged not to match the statement is not
+  // evidence of anything, and letting it be re-claimed would let a rejected code be re-submitted
+  // against a different account on the chance the next reviewer waves it through.
+  const a = await seedLandlord({ name: 'First', subscription: { status: 'unpaid' } });
+  const code = 'REJECTEDCODE1';
 
   await request(app)
     .post('/api/billing/request')
@@ -179,7 +205,27 @@ test('a rejected claim frees the code to be submitted again', async () => {
     .post('/api/billing/request')
     .set('Authorization', `Bearer ${b.token}`)
     .send({ plan: 'basic', mpesa_confirmation_code: code })
-    .expect(201);
+    .expect(409);
+});
+
+test('one account cannot flood the queue with claims', async () => {
+  const { token } = await seedLandlord({ name: 'Greedy', subscription: { status: 'unpaid' } });
+
+  for (let i = 0; i < 3; i++) {
+    await request(app)
+      .post('/api/billing/request')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ plan: 'basic', mpesa_confirmation_code: `FLOODCODE00${i}` })
+      .expect(201);
+  }
+
+  const fourth = await request(app)
+    .post('/api/billing/request')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ plan: 'basic', mpesa_confirmation_code: 'FLOODCODE999' })
+    .expect(429);
+
+  assert.match(fourth.body.message, /already have payment claims/i);
 });
 
 test('a bad plan or a missing code is rejected', async () => {

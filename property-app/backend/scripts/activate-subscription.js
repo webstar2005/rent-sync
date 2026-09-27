@@ -8,11 +8,21 @@
 //
 // Usage (from property-app/backend):
 //   node scripts/activate-subscription.js --list
-//   node scripts/activate-subscription.js ruth@example.com premium
 //   node scripts/activate-subscription.js ruth@example.com premium --code QJG7X2M4KL
-//   node scripts/activate-subscription.js ruth@example.com --units 120        # override the ceiling
+//   node scripts/activate-subscription.js ruth@example.com premium --units 120   # override the ceiling
+//   node scripts/activate-subscription.js ruth@example.com --no-claim --reason "paid by phone"
 //   node scripts/activate-subscription.js ruth@example.com --suspend
 //   node scripts/activate-subscription.js ruth@example.com --reactivate
+//
+// --code is REQUIRED for a normal activation and must match a pending claim from that same
+// account: the claim is the only record linking a payment to a person, so an unverified code would
+// make the audit trail decorative. For a payment taken outside the app (phone, cash, bank
+// transfer) use --no-claim --reason "..." instead, which is recorded in its place.
+//
+// --list prints a ready-made --code command for every pending claim, so the normal path is:
+//
+//   node scripts/activate-subscription.js --list
+//   node scripts/activate-subscription.js <the printed command>
 //
 // DATABASE_URL comes from the environment, or from backend/.env.production (gitignored) if present.
 
@@ -118,6 +128,48 @@ try {
   if (unitsLimit === null) unitsLimit = 100000; // enterprise: effectively uncapped
 
   const code = valueOf('--code');
+  const noClaim = flags.has('--no-claim');
+  const reason = valueOf('--reason');
+  const by = valueOf('--by') ?? 'admin-cli';
+
+  if (code && noClaim) {
+    die('--code and --no-claim contradict each other. Drop --no-claim to activate against a submitted claim.');
+  }
+  if (noClaim && !reason) {
+    die('--no-claim needs --reason "<what proves this payment>", so the audit trail is not empty.');
+  }
+
+  // THE PAYER'S CLAIM IS THE EVIDENCE, so it has to actually exist and belong to this account.
+  // Previously --code was optional and unvalidated: any string could switch an account on and be
+  // stored as payment_reference, and a code that matched nothing failed silently, leaving an admin
+  // believing they had an audit trail when they had none.
+  let claim = null;
+  if (!noClaim) {
+    if (!code) {
+      die(
+        'Pass --code <mpesa code> to activate against a submitted claim, or ' +
+          '--no-claim --reason "..." for a payment taken outside the app (phone, cash, transfer).'
+      );
+    }
+    const { rows } = await client.query(
+      `SELECT id, plan, amount FROM payment_requests
+        WHERE user_id = $1 AND mpesa_confirmation_code = $2 AND status = 'pending'`,
+      [user.id, code]
+    );
+    claim = rows[0] ?? null;
+    if (!claim) {
+      die(
+        `No pending claim from ${user.email} with code ${code}. ` +
+          'Check the code against --list; it may be mistyped, already reviewed, or belong to another account.'
+      );
+    }
+    if (claim.plan !== plan.key) {
+      console.warn(
+        `WARNING: the claim was for ${claim.plan} (KES ${claim.amount}) but you are activating ` +
+          `${plan.key} (KES ${plan.amount}). Only continue if the larger payment is on the statement.`
+      );
+    }
+  }
 
   try {
     await client.query('BEGIN');
@@ -129,21 +181,25 @@ try {
            units_limit = $3,
            activated_at = COALESCE(activated_at, NOW()),
            payment_reference = $4,
-           payment_confirmed_by = 'admin-cli',
+           payment_confirmed_by = $5,
            payment_confirmed_at = NOW(),
            updated_at = NOW()
        WHERE id = $1`,
-      [user.id, plan.key, unitsLimit, code]
+      [user.id, plan.key, unitsLimit, noClaim ? reason : code, by]
     );
 
-    // If the payer submitted this code, close the request out so --list stops showing it.
-    if (code) {
-      await client.query(
+    // Close the claim out so --list stops showing it. reviewed_by is resolved from a real admin
+    // row rather than invented, so it stays NULL when no admin account exists.
+    if (claim) {
+      const { rowCount } = await client.query(
         `UPDATE payment_requests
-         SET status = 'approved', reviewed_at = NOW()
-         WHERE user_id = $1 AND mpesa_confirmation_code = $2 AND status = 'pending'`,
-        [user.id, code]
+           SET status = 'approved',
+               reviewed_by = (SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1),
+               reviewed_at = NOW()
+           WHERE id = $1 AND status = 'pending'`,
+        [claim.id]
       );
+      if (rowCount === 0) die(`Claim #${claim.id} changed state while you were typing. Nothing was applied.`);
     }
 
     await client.query('COMMIT');
@@ -155,7 +211,14 @@ try {
   console.log(`Activated ${user.email}`);
   console.log(`  plan:   ${plan.name}`);
   console.log(`  units:  ${unitsLimit}`);
-  console.log(`  code:   ${code ?? '(none recorded - pass --code <mpesa code> to keep the audit trail)'}`);
+  console.log(`  by:     ${by}`);
+  if (claim) {
+    console.log(`  claim:  #${claim.id} approved (code ${code})`);
+    console.log(`  record: payment_reference = ${code}`);
+  } else {
+    console.log(`  claim:  none - activated without a submitted code`);
+    console.log(`  record: payment_reference = ${reason}`);
+  }
   console.log('They are unlocked on their next request - no sign-in needed.');
 } finally {
   await client.end();
