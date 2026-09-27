@@ -11,6 +11,8 @@ export type Feature = {
 };
 
 export type PricingTier = {
+  /** Stable slug used for /pay#<id> deep links and for the subscription key in the API. */
+  id: string;
   name: string;
   price: string;
   billingUnit: string;

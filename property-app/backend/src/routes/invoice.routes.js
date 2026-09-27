@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePaid } from '../middleware/subscription.js';
 import { requireOwnerOrAdmin } from '../middleware/role.js';
 import { generateMonthlyInvoices, markOverdueInvoices } from '../services/invoiceService.js';
 import { logger } from '../utils/logger.js';
@@ -21,7 +22,7 @@ const invoiceGenerateSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be YYYY-MM').optional(),
 });
 
-router.use(requireAuth);
+router.use(requireAuth, requirePaid);
 
 router.get('/', async (req, res) => {
   try {

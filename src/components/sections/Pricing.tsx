@@ -3,7 +3,6 @@
 import { Check } from "lucide-react";
 import { pricingTiers, pricingFootnote } from "@/content/pricing";
 import { contact } from "@/content/contact";
-import { siteConfig } from "@/content/site";
 import { cn } from "@/lib/utils";
 
 export function Pricing() {
@@ -23,10 +22,10 @@ export function Pricing() {
             <div
               key={tier.name}
               className={cn(
-                "relative flex flex-col rounded-2xl border bg-white p-6 shadow-card transition-shadow duration-200 hover:shadow-card-hover lg:p-7",
+                "group relative flex flex-col rounded-2xl border bg-white p-6 shadow-card transition-all duration-200 hover:shadow-card-hover lg:p-7",
                 tier.highlighted
                   ? "border-burgundy-600 ring-1 ring-burgundy-600"
-                  : "border-black/[.04]"
+                  : "border-black/[.04] hover:border-burgundy-600 hover:ring-1 hover:ring-burgundy-600"
               )}
             >
               {tier.highlighted && (
@@ -57,12 +56,12 @@ export function Pricing() {
               </ul>
 
               <a
-                href={tier.name === "Enterprise" ? contact.phoneHref : siteConfig.appUrl}
+                href={tier.name === "Enterprise" ? contact.phoneHref : `/pay#${tier.id}`}
                 className={cn(
                   "mt-8 inline-flex h-11 items-center justify-center rounded-full text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
                   tier.highlighted
                     ? "bg-burgundy-600 text-white shadow-cta hover:bg-burgundy-700 focus-visible:ring-burgundy-600"
-                    : "border border-ink/10 bg-white text-ink hover:bg-gray-100 focus-visible:ring-ink"
+                    : "border border-ink/10 bg-white text-ink hover:border-burgundy-600 hover:bg-burgundy-600 hover:text-white group-hover:border-burgundy-600 group-hover:bg-burgundy-600 group-hover:text-white focus-visible:ring-ink"
                 )}
               >
                 {tier.ctaLabel}

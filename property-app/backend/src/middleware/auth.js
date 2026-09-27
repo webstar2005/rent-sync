@@ -6,6 +6,8 @@ import { logger } from '../utils/logger.js';
 //   - role comes from the DB, so a role change takes effect immediately (the JWT claim is not trusted)
 //   - token_version matches the JWT `tv` claim, so /logout revokes every previously issued token
 //   - is_active is enforced, so a quietly deactivated user is locked out at once
+//   - subscription_status rides along for requirePaid, so switching a subscription on takes effect
+//     on the very next request without the user having to sign in again, and at no extra query cost
 export async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
 
@@ -22,7 +24,8 @@ export async function requireAuth(req, res, next) {
 
   try {
     const result = await query(
-      `SELECT id, name, email, role, auth_provider, token_version
+      `SELECT id, name, email, role, auth_provider, token_version,
+              subscription_status, plan, units_limit, activated_at
        FROM users WHERE id = $1 AND is_active = TRUE`,
       [decoded.sub]
     );
@@ -42,6 +45,11 @@ export async function requireAuth(req, res, next) {
       email: user.email,
       role: user.role,
       auth_provider: user.auth_provider,
+      // Carried here so requirePaid can gate the product without a second query on every request.
+      subscription_status: user.subscription_status,
+      plan: user.plan,
+      units_limit: user.units_limit,
+      activated_at: user.activated_at,
     };
     next();
     } catch (error) {

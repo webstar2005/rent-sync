@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { googleLogin, login, logout, register, type AuthUser } from './lib/api/auth';
+import { getBilling } from './lib/api/billing';
 import { getApiHealth } from './lib/api/client';
 import { createProperty, getProperties, updateProperty, deleteProperty, type Property } from './lib/api/properties';
 import { createTenant, deleteTenant, getTenants, updateTenantStatus, type Tenant } from './lib/api/tenants';
@@ -22,6 +23,7 @@ import {
 } from './lib/api/reports';
 import { BulkTenantImport } from './components/BulkTenantImport';
 import SetupChecklist, { type SetupStep } from './components/SetupChecklist';
+import Paywall from './components/Paywall';
 
 type Mode = 'login' | 'register';
 
@@ -36,6 +38,9 @@ export default function App() {
   const [mode, setMode] = useState<Mode>('login');
   const [gsiReady, setGsiReady] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
+  // null = not checked yet. Kept distinct from 'active' so a brief flash of the paywall during
+  // sign-in does not happen, and so a billing outage does not lock a paying customer out.
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -200,12 +205,25 @@ export default function App() {
       setUser(JSON.parse(savedUser));
     }
 
-    if (isLoggedIn) {
-      loadProperties();
-      loadPaymentChannels();
-      getArrears().then(setArrears).catch(() => setArrears([]));
-      getCollectionRate().then(setCollectionRate).catch(() => undefined);
-    }
+    if (!isLoggedIn) return;
+
+    // Check the subscription BEFORE loading dashboard data. Every product endpoint answers 402 for
+    // an unpaid account, so loading first would fire eight requests that all fail and surface eight
+    // errors on a screen the user is about to be replaced from.
+    getBilling()
+      .then((state) => {
+        setSubscriptionStatus(state.subscription.status);
+        if (state.subscription.status === 'active') {
+          loadProperties();
+          loadPaymentChannels();
+          getArrears().then(setArrears).catch(() => setArrears([]));
+          getCollectionRate().then(setCollectionRate).catch(() => undefined);
+        }
+      })
+      // A failure here is deliberately swallowed. If billing is unreachable we leave the status null
+      // and let the dashboard render: failing closed here would take a paying customer offline
+      // because of our own outage, which is worse than briefly showing someone paid-for features.
+      .catch(() => setSubscriptionStatus('active'));
   }, [isLoggedIn]);
 
   // Payments arrive by webhook, so a dashboard that only loads on mount shows a landlord a stale page
@@ -213,11 +231,12 @@ export default function App() {
   // appears on its own; the Refresh button and "Updated" stamp make the timing visible rather than magic.
   useEffect(() => {
     if (!isLoggedIn) return;
+    if (subscriptionStatus !== 'active') return;
     const timer = setInterval(() => {
       loadProperties(true).then(() => setLastUpdated(new Date())).catch(() => undefined);
     }, 30000);
     return () => clearInterval(timer);
-  }, [isLoggedIn]);
+  }, [isLoggedIn, subscriptionStatus]);
 
   async function loadProperties(silent = false) {
     try {
@@ -1000,6 +1019,25 @@ export default function App() {
           </form>
         </div>
       </div>
+    );
+  }
+
+  // The paywall. Placed after the auth gate so a signed-in, unpaid account sees this instead of the
+  // dashboard. `subscriptionStatus === null` falls through to the dashboard, because a null means
+  // "not known yet" (still fetching, or billing unreachable) and must not lock a paying customer out.
+  if (subscriptionStatus !== null && subscriptionStatus !== 'active') {
+    return (
+      <Paywall
+        onActivated={() => {
+          setSubscriptionStatus(null);
+          getBilling()
+            .then((state) => {
+              setSubscriptionStatus(state.subscription.status);
+              if (state.subscription.status === 'active') loadProperties();
+            })
+            .catch(() => setSubscriptionStatus('active'));
+        }}
+      />
     );
   }
 

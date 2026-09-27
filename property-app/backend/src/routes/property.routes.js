@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePaid } from '../middleware/subscription.js';
 import { requireRole } from '../middleware/role.js';
 import { logger } from '../utils/logger.js'
 
@@ -22,7 +23,7 @@ const propertyUpdateSchema = z.object({
   status: z.enum(['active', 'inactive', 'maintenance']).optional(),
 });
 
-router.use(requireAuth);
+router.use(requireAuth, requirePaid);
 
 router.get('/', async (req, res) => {
   try {

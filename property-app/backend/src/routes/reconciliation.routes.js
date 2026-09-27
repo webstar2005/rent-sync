@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { query, withTransaction } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePaid } from '../middleware/subscription.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
@@ -21,7 +22,7 @@ function normalizeTenantName(value = '') {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-router.use(requireAuth);
+router.use(requireAuth, requirePaid);
 
 router.get('/alerts', async (req, res) => {
   try {

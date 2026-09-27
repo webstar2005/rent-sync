@@ -15,6 +15,7 @@ import reconciliationRoutes from './routes/reconciliation.routes.js';
 import reportRoutes from './routes/report.routes.js';
 import cronRoutes from './routes/cron.routes.js';
 import channelRoutes from './routes/channel.routes.js';
+import billingRoutes from './routes/billing.routes.js';
 import payheroWebhookRoutes from './routes/payheroWebhook.routes.js';
 
 const app = express();
@@ -98,6 +99,9 @@ app.get('/health/db', async (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+// Mounted before the product routers and WITHOUT requirePaid: a landlord who has not paid still
+// has to be able to read what they owe and submit their M-Pesa confirmation code.
+app.use('/api/billing', billingRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/tenants', tenantRoutes);
 app.use('/api/invoices', invoiceRoutes);

@@ -2,11 +2,12 @@ import express from 'express';
 import { z } from 'zod';
 import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePaid } from '../middleware/subscription.js';
 import { requireOwnerOrAdmin } from '../middleware/role.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
-router.use(requireAuth);
+router.use(requireAuth, requirePaid);
 router.use(requireOwnerOrAdmin);
 
 const arrearsSchema = z.object({

@@ -9,10 +9,38 @@ CREATE TABLE IF NOT EXISTS users (
   google_sub TEXT,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   token_version INTEGER NOT NULL DEFAULT 1,
+  -- Subscription gate. 'active' is NOT the default here on purpose: a fresh database has no
+  -- grandfathered users, so every signup starts at 'unpaid' and stays locked until an admin
+  -- confirms payment. Migration 010 flips the default the other way round for existing
+  -- databases so current users are not locked out. See database/migrations/010_user_subscription.sql.
+  plan TEXT,
+  subscription_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (subscription_status IN ('unpaid', 'active', 'suspended')),
+  units_limit INTEGER,
+  activated_at TIMESTAMPTZ,
+  payment_reference TEXT,
+  payment_confirmed_by TEXT,
+  payment_confirmed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (google_sub)
 );
+
+-- What a payer claims to have sent by M-Pesa Send Money. The confirmation code from their SMS
+-- is the only evidence, so one pending claim per code is enforced below.
+CREATE TABLE IF NOT EXISTS payment_requests (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  mpesa_confirmation_code TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_requests_pending_code
+  ON payment_requests (mpesa_confirmation_code) WHERE status = 'pending';
 
 -- Properties owned or managed by a user
 CREATE TABLE IF NOT EXISTS properties (

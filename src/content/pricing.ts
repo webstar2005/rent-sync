@@ -2,6 +2,7 @@ import type { PricingTier } from "@/types";
 
 export const pricingTiers: PricingTier[] = [
   {
+    id: "basic",
     name: "Basic",
     price: "KES 2,000",
     billingUnit: "/month",
@@ -16,6 +17,7 @@ export const pricingTiers: PricingTier[] = [
     ctaLabel: "Get Started",
   },
   {
+    id: "standard",
     name: "Standard",
     price: "KES 4,000",
     billingUnit: "/month",
@@ -32,6 +34,7 @@ export const pricingTiers: PricingTier[] = [
     highlighted: true,
   },
   {
+    id: "premium",
     name: "Premium",
     price: "KES 6,500",
     billingUnit: "/month",
@@ -47,6 +50,7 @@ export const pricingTiers: PricingTier[] = [
     ctaLabel: "Get Started",
   },
   {
+    id: "enterprise",
     name: "Enterprise",
     price: "Custom",
     billingUnit: "",

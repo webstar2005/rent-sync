@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { pool, query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePaid } from '../middleware/subscription.js';
 import { bulkLimiter } from '../middleware/rateLimit.js';
 import { logger } from '../utils/logger.js';
 
@@ -32,7 +33,7 @@ const tenantStatusSchema = z.object({
   status: z.enum(['active', 'pending', 'moved_out', 'archived']),
 });
 
-router.use(requireAuth);
+router.use(requireAuth, requirePaid);
 
 // Bulk import — single transaction per batch, scoped to organization (owner_id)
 router.post('/bulk', bulkLimiter, async (req, res) => {

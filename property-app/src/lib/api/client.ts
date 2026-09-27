@@ -3,6 +3,36 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '' : 'http://localhost:4000');
 
+// A failed request, carrying enough structure for the UI to react rather than just complain.
+// `message` is the server's own message when it sent one, which is what every existing catch block
+// already renders — before this, those blocks were showing the caller a raw JSON body.
+export class ApiError extends Error {
+  status: number;
+  payload: Record<string, unknown> | null;
+
+  constructor(status: number, payload: Record<string, unknown> | null, fallback: string) {
+    super(typeof payload?.message === 'string' ? payload.message : fallback);
+    this.name = 'ApiError';
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+export function isApiError(error: unknown, status?: number): error is ApiError {
+  if (!(error instanceof ApiError)) return false;
+  return status === undefined || error.status === status;
+}
+
+async function readBody(response: Response): Promise<Record<string, unknown> | null> {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { message: text };
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('property_app_token');
 
@@ -16,8 +46,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || 'Request failed');
+    const payload = await readBody(response);
+    throw new ApiError(response.status, payload, `Request failed (${response.status})`);
   }
 
   // 204 No Content (e.g. successful DELETE) / 205 — no body to parse.
@@ -44,8 +74,8 @@ export async function downloadCsv(path: string, filename: string) {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || 'Request failed');
+    const payload = await readBody(response);
+    throw new ApiError(response.status, payload, `Request failed (${response.status})`);
   }
 
   const blob = await response.blob();

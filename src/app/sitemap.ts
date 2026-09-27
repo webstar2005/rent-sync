@@ -6,7 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const base = "https://rentsync.africa";
   const now = new Date();
 
-  const routes = ["", "/features", "/pricing", "/faqs", "/privacy", "/terms"] as const;
+  const routes = ["", "/features", "/pricing", "/pay", "/faqs", "/privacy", "/terms"] as const;
 
   return routes.map((route) => ({
     url: `${base}${route}`,

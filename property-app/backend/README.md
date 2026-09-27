@@ -173,6 +173,55 @@ CREATE TABLE maintenance_requests (
 );
 ```
 
+## Subscriptions (Rent Sync's own plans)
+
+Rent Sync is a paid product, separate from the tenant rent it collects. Plans are quoted on the
+marketing site and paid by **M-Pesa Send Money to 0790 325 943** — not Lipa na M-PESA, so there is
+no till, no paybill, and no paybill number to look up.
+
+Because a Send Money transfer records no reference we can read, nothing about it can be automated
+safely. A landlord signs up, reads the instructions, pays, and pastes the confirmation code from
+their M-Pesa SMS into the paywall. An admin then checks that code against the statement by hand
+and switches the account on.
+
+**Every day-to-day operation:**
+
+```bash
+cd property-app/backend
+
+# What is waiting to be checked?
+node scripts/activate-subscription.js --list
+
+# Checked it against the statement and it is there? Switch them on.
+node scripts/activate-subscription.js ruth@example.com premium --code QJG7X2M4KL
+
+# Non-standard unit count, suspend, or bring back
+node scripts/activate-subscription.js ruth@example.com premium --units 120
+node scripts/activate-subscription.js ruth@example.com --suspend
+node scripts/activate-subscription.js ruth@example.com --reactivate
+```
+
+Activation takes effect on that user's **next request** — there is no need to get them to sign in
+again, because `requireAuth` reads `subscription_status` from the live users row rather than from
+the JWT.
+
+**Endpoints.** `/api/billing/*` is deliberately mounted *without* `requirePaid`: a locked-out
+landlord still has to be able to find out what they owe and hand over their code. Everything else
+under `/api` answers **402 Payment Required** until the subscription is active.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/billing/me` | Status, plan, amount, pending claims, payment instructions |
+| `POST /api/billing/request` | Record a claim. **Grants nothing** — it writes to `payment_requests` for an admin to check |
+
+A claim never activates an account, and one M-Pesa confirmation code can only have one *pending*
+claim (a partial unique index enforces it), so a single payment cannot switch on two accounts.
+
+**Grandfathering.** Migration `010` adds the columns with `DEFAULT 'active'` so every pre-existing
+account keeps working, then moves the default to `'unpaid'` so every *new* signup is locked. That
+ordering is the whole trick — do not "simplify" it into a single `DEFAULT 'unpaid'`, which would
+lock out every current landlord on the next deploy.
+
 ## Notes
 
 This is now a stronger starting point for the property-management app. The next natural extensions are role-based admin access, richer invoice/payment logic, and a UI layer that calls these endpoints.

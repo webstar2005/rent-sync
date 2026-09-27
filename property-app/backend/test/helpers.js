@@ -91,7 +91,7 @@ export async function applySchema() {
 // Wipe all domain tables (cascade handles FKs) for a clean slate per test.
 export async function resetDb() {
   await pool.query(
-    `TRUNCATE payhero_callback_log, payments, payment_reconciliation_events, payment_channels,
+    `TRUNCATE payhero_callback_log, payment_requests, payments, payment_reconciliation_events, payment_channels,
      invoices, tenants, properties, maintenance_requests, property_members, users
      RESTART IDENTITY CASCADE`
   );
@@ -103,11 +103,22 @@ export async function closeDb() {
 
 // ---- Seed helpers ----
 
-export async function seedLandlord({ name = 'Landlord A', email, role = 'landlord' } = {}) {
+// Seeded landlords are PAID by default, because the product routes are behind requirePaid and a
+// seeded 'unpaid' landlord would turn every existing test into a 402 assertion. Tests about the
+// paywall itself pass { subscription: { status: 'unpaid' } } to get a locked account.
+export async function seedLandlord({
+  name = 'Landlord A',
+  email,
+  role = 'landlord',
+  subscription = {},
+} = {}) {
+  const { status = 'active', plan = 'standard', units_limit: unitsLimit = 50 } = subscription;
   const emailValue = email || `${name.toLowerCase().replace(/\s+/g, '_')}@test.local`;
   const user = await pool.query(
-    `INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *`,
-    [name, emailValue, bcrypt.hashSync('password'), role]
+    `INSERT INTO users (name, email, password_hash, role, plan, subscription_status, units_limit, activated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $6 = 'active' THEN NOW() ELSE NULL END)
+     RETURNING *`,
+    [name, emailValue, bcrypt.hashSync('password'), role, status === 'active' ? plan : null, status, unitsLimit]
   );
   const u = user.rows[0];
   return { user: u, token: signToken({ sub: u.id, email: u.email, role: u.role, name: u.name }) };

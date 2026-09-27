@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePaid } from '../middleware/subscription.js';
 import { requireOwnerOrAdmin } from '../middleware/role.js';
 import { channelLimiter } from '../middleware/rateLimit.js';
 import { registerChannel, listChannels, getServiceWalletBalance, lowBalanceThreshold, payheroBaseUrl } from '../services/payhero.js';
@@ -23,7 +24,7 @@ const channelUpdateSchema = z.object({
 
 // Channel management is landlord (owner) scoped — a channel belongs to exactly one owner and is
 // only ever read/written through these owner-scoped queries.
-router.use(requireAuth, requireOwnerOrAdmin);
+router.use(requireAuth, requirePaid, requireOwnerOrAdmin);
 
 router.get('/', async (req, res) => {
   try {

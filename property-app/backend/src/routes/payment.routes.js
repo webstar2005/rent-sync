@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { query, withTransaction } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePaid } from '../middleware/subscription.js';
 import { initiateStkPush, payheroCallbackUrl } from '../services/payhero.js';
 import { logger } from '../utils/logger.js';
 
@@ -27,7 +28,7 @@ function toMsisdn(phone) {
   return `254${digits.slice(-9)}`;
 }
 
-router.use(requireAuth);
+router.use(requireAuth, requirePaid);
 
 router.get('/', async (req, res) => {
   try {

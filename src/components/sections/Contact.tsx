@@ -1,5 +1,6 @@
 import { Mail, MessageCircle, Phone } from "lucide-react";
 import { contact } from "@/content/contact";
+import { CopyEmailButton } from "@/components/sections/CopyEmailButton";
 
 const channels = [
   {
@@ -21,7 +22,7 @@ const channels = [
     label: "Email",
     value: contact.email,
     href: contact.emailHref,
-    hint: "We reply within one business day",
+    hint: "Or copy the address and write to us from your own mail app",
   },
 ];
 
@@ -51,10 +52,17 @@ export function Contact() {
               <p className="mt-4 text-xs font-semibold uppercase tracking-widest text-gray-500">
                 {c.label}
               </p>
-              <p className="mt-1.5 font-heading text-h4 break-words text-ink transition group-hover:text-burgundy-600">
-                {c.value}
-              </p>
-              <p className="mt-auto pt-4 text-small text-gray-500">{c.hint}</p>
+                <p className="mt-1.5 font-heading text-h4 break-words text-ink transition group-hover:text-burgundy-600">
+                  {c.value}
+                </p>
+                {c.label === "Email" ? (
+                  <>
+                    <CopyEmailButton email={c.value} />
+                    <p className="pt-1.5 text-small text-gray-500">{c.hint}</p>
+                  </>
+                ) : (
+                  <p className="mt-auto pt-4 text-small text-gray-500">{c.hint}</p>
+                )}
             </a>
           ))}
         </div>
