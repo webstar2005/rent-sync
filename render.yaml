@@ -35,6 +35,13 @@ services:
         sync: false # >= 32 chars (openssl rand -hex 32)
       - key: CRON_SECRET
         sync: false # >= 16 chars
+      # Monthly rent invoices are generated in-process, not by an external cron. Defaults are 6-hourly
+      # and enabled; set to false to switch invoicing off entirely (the Generate invoices button and
+      # POST /api/cron/invoices both keep working).
+      - key: INVOICE_SCHEDULER_ENABLED
+        value: "true"
+      - key: INVOICE_SCHEDULER_INTERVAL_HOURS
+        value: "6"
       - key: PAYHERO_WEBHOOK_SECRET
         sync: false # >= 16 chars, matches x-payhero-webhook-secret / ?secret=
       - key: PAYHERO_AUTH_TOKEN

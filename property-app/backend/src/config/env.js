@@ -66,4 +66,8 @@ export const env = {
   PAYHERO_IP_ALLOWLIST: process.env.PAYHERO_IP_ALLOWLIST,
   PAYHERO_LOW_BALANCE_ALERT: process.env.PAYHERO_LOW_BALANCE_ALERT,
   CORS_ORIGIN: process.env.CORS_ORIGIN,
+  // Monthly invoice generation runs in-process (see services/scheduler.js). Both are optional and
+  // have defaults; listed here so they are discoverable next to the rest of the configuration.
+  INVOICE_SCHEDULER_ENABLED: process.env.INVOICE_SCHEDULER_ENABLED,
+  INVOICE_SCHEDULER_INTERVAL_HOURS: process.env.INVOICE_SCHEDULER_INTERVAL_HOURS,
 };
