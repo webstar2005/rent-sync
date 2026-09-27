@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { siteConfig } from "@/content/site";
+import { contact } from "@/content/contact";
 
 export function Footer() {
   const year = new Date().getFullYear();
@@ -24,16 +25,25 @@ export function Footer() {
             <h4 className="font-heading text-sm font-semibold uppercase tracking-widest text-white">Product</h4>
             <ul className="mt-4 space-y-3 text-small">
               <li><Link href="/features" className="hover:text-white transition-colors">Features</Link></li>
+              <li><Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link></li>
               <li><Link href="/faqs" className="hover:text-white transition-colors">FAQs</Link></li>
               <li><a href={siteConfig.appUrl} className="hover:text-white transition-colors">Sign In → Dashboard</a></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="font-heading text-sm font-semibold uppercase tracking-widest text-white">Landlord</h4>
+            <h4 className="font-heading text-sm font-semibold uppercase tracking-widest text-white">Contact</h4>
             <ul className="mt-4 space-y-3 text-small">
-              <li><Link href="/features" className="hover:text-white transition-colors">Why Rent Sync</Link></li>
-              <li><a href={siteConfig.appUrl} className="hover:text-white transition-colors">Open Dashboard</a></li>
+              <li>
+                <a href={contact.phoneHref} className="hover:text-white transition-colors">
+                  {contact.phone}
+                </a>
+              </li>
+              <li>
+                <a href={contact.emailHref} className="break-all hover:text-white transition-colors">
+                  {contact.email}
+                </a>
+              </li>
             </ul>
           </div>
 
@@ -49,8 +59,7 @@ export function Footer() {
         <div className="mt-12 flex flex-col gap-4 border-t border-white/10 pt-8 text-xs leading-relaxed text-white/40 sm:flex-row sm:items-center sm:justify-between">
           <p>© {year} {siteConfig.name}. All rights reserved.</p>
           <p>Built for property teams in Kenya and beyond.</p>
-        </div>
-      </div>
+        </div>      </div>
     </footer>
   );
 }

@@ -1,40 +1,46 @@
 import type { Feature } from "@/types";
 
+/**
+ * Every claim here must be something the app actually does today. The product
+ * deliberately ships no SMS/WhatsApp layer, no reminder sender, no receipt
+ * generation, and no occupancy metric — so do not describe them here.
+ * See docs/PLAN.md Section 11.6 (SMS removed) and 11.4 (PayHero, inbound only).
+ */
 export const features: Feature[] = [
   {
-    icon: "bell",
-    title: "Automated Rent Reminders & Collection",
+    icon: "receipt",
+    title: "Automated Monthly Invoicing",
     description:
-      "Send automatic payment reminders and collect rent via mobile money or bank transfer, without manual follow-ups.",
+      "Next month's rent is billed to every active tenant automatically, dated from the rent-due day you set per property. The platform runs this for you, and a missed run catches up on the next one rather than skipping rent.",
+  },
+  {
+    icon: "zap",
+    title: "Payments Matched Automatically",
+    description:
+      "Register your M-Pesa paybill, till, or bank account and incoming payments are matched to the right tenant and invoice the moment they clear.",
+  },
+  {
+    icon: "bar-chart",
+    title: "Arrears & Collection Reports",
+    description:
+      "Arrears by property, collection rate across 12 months, and a per-tenant statement with a running balance — all exportable as CSV.",
   },
   {
     icon: "users",
     title: "Digital Tenant Records",
     description:
-      "Keep tenant details, lease terms, and full payment history organized and searchable in one dashboard.",
-  },
-  {
-    icon: "receipt",
-    title: "Instant Invoices & Receipts",
-    description:
-      "Invoices and receipts generate and send automatically the moment a payment clears.",
-  },
-  {
-    icon: "bar-chart",
-    title: "Real-Time Financial Reports",
-    description:
-      "Track income, arrears, and occupancy across the whole portfolio with exportable statements.",
+      "Lease start and end, unit, phone, and the full payment history in one profile — searchable across every building you manage.",
   },
   {
     icon: "building",
     title: "Multi-Property Dashboard",
     description:
-      "Manage multiple buildings or units from one login, with role-based access for staff.",
+      "Every building, unit, tenant, invoice, and payment behind one login, with your records scoped to your own account and no one else's.",
   },
   {
     icon: "wrench",
     title: "Maintenance Request Tracking",
     description:
-      "Tenants submit maintenance issues in-app and track resolution status without back-and-forth calls.",
+      "Log a repair against a unit, move it from open to in progress to resolved, and get flagged when an urgent job starts dragging.",
   },
 ];

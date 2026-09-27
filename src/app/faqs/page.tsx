@@ -3,15 +3,16 @@ import { Footer } from "@/components/layout/Footer";
 import { faqs } from "@/content/faqs";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/Accordion";
 import { siteConfig } from "@/content/site";
+import { contact } from "@/content/contact";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "FAQs — Rent Sync",
-  description: "Common questions about Rent Sync — rent collection, tenant data, properties, payments, and free trial.",
+  description: "Common questions about Rent Sync — rent collection, tenant payments, data security, managing multiple properties, and pricing.",
   alternates: { canonical: "/faqs" },
   openGraph: {
     title: "FAQs — Rent Sync",
-    description: "Common questions about Rent Sync — rent collection, tenant data, properties, payments, and free trial.",
+    description: "Common questions about Rent Sync — rent collection, tenant payments, data security, managing multiple properties, and pricing.",
     url: "/faqs",
     type: "website",
     images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Rent Sync FAQs" }],
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "FAQs — Rent Sync",
-    description: "Common questions about Rent Sync — rent collection, tenant data, properties, payments, and free trial.",
+    description: "Common questions about Rent Sync — rent collection, tenant payments, data security, managing multiple properties, and pricing.",
     images: ["/opengraph-image"],
   },
 };
@@ -53,12 +54,16 @@ export default function FaqsPage() {
 
               <div className="mt-8 rounded-xl border border-black/5 bg-white p-6 text-center shadow-card">
                 <h3 className="font-heading text-h4 text-ink">Still need help?</h3>
-                <p className="mt-2 text-small text-gray-500">Open your live dashboard — your tenants, rent, and arrears in one place.</p>
+                <p className="mt-2 text-small text-gray-500">
+                  Call <a href={contact.phoneHref} className="font-medium text-burgundy-600 hover:underline">{contact.phone}</a> or email{" "}
+                  <a href={contact.emailHref} className="font-medium text-burgundy-600 hover:underline">{contact.email}</a>{" "}
+                  and we will help you get set up.
+                </p>
                 <a
                   href={siteConfig.appUrl}
                   className="mt-4 inline-flex h-11 items-center justify-center rounded-full bg-burgundy-600 px-8 text-sm font-semibold text-white shadow-cta hover:bg-burgundy-700"
                 >
-                  Sign In
+                  Get Started
                 </a>
               </div>
             </div>

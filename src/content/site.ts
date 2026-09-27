@@ -3,9 +3,11 @@ import type { SiteConfig } from "@/types";
 export const siteConfig: SiteConfig = {
   name: "Rent Sync",
   tagline: "Run Your Rental Portfolio Without the Spreadsheet Chaos",
-  // Single-landlord sale — no public pricing tier; Sign In goes to live dashboard (property-app)
+  // Sign In goes to the live dashboard (property-app). Public pricing is published
+  // in src/content/pricing.ts, so enterprise enquiries route through contact.ts.
   navLinks: [
     { label: "Features", href: "/features" },
+    { label: "Pricing", href: "/pricing" },
     { label: "FAQs", href: "/faqs" },
   ],
   appUrl:

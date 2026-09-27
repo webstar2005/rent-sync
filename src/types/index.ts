@@ -20,6 +20,14 @@ export type PricingTier = {
   highlighted?: boolean;
 };
 
+/**
+ * Real, publishable testimonials only — with the client's permission to use the
+ * name. Never invent quotes to fill a slot (docs/PLAN.md Section 4, row 6).
+ * The shape is kept here so `src/content/testimonials.ts` and a
+ * `components/sections/Testimonials.tsx` can be reintroduced the moment genuine
+ * quotes exist; the fabricated set that used to sit in the repo was deleted
+ * rather than shipped.
+ */
 export type Testimonial = {
   quote: string;
   name: string;

@@ -136,7 +136,7 @@ The client's product is in the **property management / rent collection software*
 **Hero copy (draft):**
 - Headline: "Run Your Rental Portfolio Without the Spreadsheet Chaos"
 - Subhead: "Software for landlords and property managers to track rent, tenants, and payments — all in one place."
-- Primary CTA: "Start Free" · Secondary CTA: "See How It Works"
+- Primary CTA: "Get Started" · Secondary CTA: "See How It Works"
 
 **Feature set (draft — 6 features for `FeatureGrid`):**
 1. **Automated Rent Reminders & Collection** — Send automatic payment reminders and collect rent via mobile money or bank transfer, without manual follow-ups.

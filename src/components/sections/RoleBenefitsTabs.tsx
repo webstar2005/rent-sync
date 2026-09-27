@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Home, Users } from "lucide-react";
+import { Building2, Home } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 
 type Benefit = { title: string; desc: string };
@@ -15,9 +15,18 @@ const audienceContent: Record<
     headline: "Self-manage without the spreadsheet spiral",
     sub: "For owners handling their own units — 1 to 20, same Rent Sync clarity.",
     benefits: [
-      { title: "Know who paid — no calls needed", desc: "Automatic reminders and live payment status per unit, so you stop chasing." },
-      { title: "One view for every unit", desc: "Tenant records, lease terms, and full history searchable — no more folder piles." },
-      { title: "Rent due before it becomes arrears", desc: "Alerts before due date, receipts the moment M-Pesa or bank clears." },
+      {
+        title: "Know who has paid",
+        desc: "Incoming M-Pesa and bank payments match to the right tenant automatically, so you stop making calls to check.",
+      },
+      {
+        title: "Invoices go out on their own",
+        desc: "Next month's rent is billed to every active tenant automatically, on the due day you set per property.",
+      },
+      {
+        title: "Arrears you can act on",
+        desc: "Overdue invoices are flagged the moment they pass their date and sorted by amount outstanding.",
+      },
     ],
   },
   managers: {
@@ -26,9 +35,18 @@ const audienceContent: Record<
     headline: "Run multiple estates from one login",
     sub: "For managers handling owners' portfolios — 10 to 150+ units, same ledger.",
     benefits: [
-      { title: "Owner-ready statements", desc: "Arrears by property and collection rate over time — exportable, no manual math." },
-      { title: "Built for teams", desc: "Owner / manager / staff roles, per-organization isolation — every row scoped by org." },
-      { title: "From chat to cleared", desc: "Maintenance open → in-progress → resolved, linked to unit + tenant for triage." },
+      {
+        title: "Owner-ready statements",
+        desc: "Arrears by property and collection rate over 12 months, exportable as CSV for whoever asks.",
+      },
+      {
+        title: "One portfolio, one login",
+        desc: "Every property, unit, tenant, and payment in one place — and your records stay scoped to your account.",
+      },
+      {
+        title: "Repairs tracked to the unit",
+        desc: "Log maintenance against a unit, move it through open to resolved, and get flagged when an urgent job drags.",
+      },
     ],
   },
 };
@@ -41,7 +59,8 @@ export function RoleBenefitsTabs() {
           <p className="text-xs font-semibold uppercase tracking-widest text-burgundy-600">Built for how you work</p>
           <h2 className="mt-3 font-heading text-h2 text-ink">Two audiences, one ledger</h2>
           <p className="mt-4 text-body text-gray-500">
-            Rent Sync is category-original (Section 4a) — not copied. Landlords and property managers share the same core, with workflows tuned to how each works.
+            Landlords and property managers share the same core — a single record of who owes what, and who has
+            paid — with the views each of you actually works from.
           </p>
         </div>
 
@@ -85,11 +104,6 @@ export function RoleBenefitsTabs() {
                       </li>
                     ))}
                   </ul>
-
-                  <p className="mt-6 flex items-center gap-2 text-xs text-gray-500">
-                    <Users className="h-4 w-4 text-burgundy-600" aria-hidden="true" />
-                    Third segment — Real Estate Agencies / Housing Estates — only if product supports it (Section 4a). Confirm with client.
-                  </p>
                 </div>
               </TabsContent>
             );

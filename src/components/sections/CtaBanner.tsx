@@ -19,16 +19,16 @@ export function CtaBanner() {
             <p className="text-xs font-semibold uppercase tracking-widest text-burgundy-600">Get started in minutes</p>
             <h2 className="mt-2 font-heading text-h2 text-ink">Ready to clear the arrears backlog?</h2>
             <p className="mt-3 max-w-xl text-body text-gray-500">
-              Join landlords and property managers who replaced spreadsheets with one clean dashboard. Start free — no credit card required.
+              Join landlords and property managers who replaced spreadsheets with one clean dashboard. Priced by the units you manage, from KES 2,000/month.
             </p>
           </div>
           <div className="relative mt-8 flex shrink-0 flex-col gap-3 sm:flex-row lg:mt-0">
-            <a
-              href={siteConfig.appUrl}
-              className="inline-flex h-12 items-center justify-center rounded-full bg-burgundy-600 px-8 text-sm font-semibold text-white shadow-cta transition hover:bg-burgundy-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-burgundy-600 focus-visible:ring-offset-2"
-            >
-              Sign In
-            </a>
+              <a
+                href={siteConfig.appUrl}
+                className="inline-flex h-12 items-center justify-center rounded-full bg-burgundy-600 px-8 text-sm font-semibold text-white shadow-cta transition hover:bg-burgundy-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-burgundy-600 focus-visible:ring-offset-2"
+              >
+                Get Started
+              </a>
           </div>
         </div>
       </div>

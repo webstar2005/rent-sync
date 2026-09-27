@@ -27,7 +27,7 @@ export function Hero() {
             Run Your Rental Portfolio Without the Spreadsheet Chaos
           </h1>
           <p className="mt-5 max-w-xl text-body-lg text-gray-500">
-            Software for landlords and property managers to track rent, tenants, and payments — all in one place. Invoices, arrears, and occupancy — clear at a glance.
+            Software for landlords and property managers to track rent, tenants, and payments — all in one place. Invoices, arrears, and outstanding balances — clear at a glance.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -67,13 +67,13 @@ export function Hero() {
                 </div>
                 <div className="rounded-xl bg-gray-100 p-4">
                   <p className="text-xs font-medium uppercase tracking-widest text-gray-500">Arrears</p>
-                  <p className="mt-1 font-heading text-lg font-bold text-ink">KES 41k</p>
+                  <p className="mt-1 font-heading text-lg font-bold text-ink">12 invoices</p>
                   <p className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white"><span className="block h-full w-[18%] bg-ink" /></p>
                 </div>
                 <div className="rounded-xl bg-ink p-4 text-white">
-                  <p className="text-xs font-medium uppercase tracking-widest text-white/60">Occupancy</p>
-                  <p className="mt-1 font-heading text-lg font-bold text-white">94%</p>
-                  <p className="mt-1 text-xs text-white/60">42 / 45 units</p>
+                  <p className="text-xs font-medium uppercase tracking-widest text-white/60">Outstanding</p>
+                  <p className="mt-1 font-heading text-lg font-bold text-white">KES 41k</p>
+                  <p className="mt-1 text-xs text-white/60">3 tenants need attention</p>
                 </div>
               </div>
 
@@ -84,7 +84,7 @@ export function Hero() {
                 </div>
                 <div className="flex items-center justify-between text-small">
                   <span className="font-medium text-gray-900">Unit 2A — A. Odhiambo</span>
-                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Due in 3 days</span>
+                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Pending</span>
                 </div>
                 <div className="flex items-center justify-between text-small">
                   <span className="font-medium text-gray-900">Maison 12 — K. Njoroge</span>
@@ -101,7 +101,7 @@ export function Hero() {
             <div className="absolute -z-10 -bottom-4 left-6 right-6 h-10 rounded-full bg-ink/10 blur-2xl" aria-hidden="true" />
           </div>
 
-          <p className="sr-only">Abstract portfolio overview showing collected rent, arrears, occupancy and tenant payment statuses.</p>
+          <p className="sr-only">Abstract portfolio overview showing collected rent, arrears, and tenant payment statuses.</p>
         </motion.div>
       </div>
     </section>
