@@ -1,0 +1,55 @@
+# Deterministic invoice generation, independent of whether the API container is awake.
+#
+# Why this exists alongside the in-process scheduler (property-app/backend/src/services/scheduler.js):
+# on Render's free plan the service hibernates after 15 min idle, so the in-process 6-hourly timer
+# can be killed before it ever fires. This workflow calls the same code through the platform-wide
+# endpoint instead, so generating next month's rent no longer depends on a long-lived process.
+#
+# This is deliberately NOT also the keep-alive. GitHub Actions `schedule` triggers are best-effort
+# and routinely run hours late, which is fine for monthly invoicing but useless for a 5-minute
+# keep-warm ping. Keep-alive needs UptimeRobot or the Starter plan — see .github/workflows/keep-alive.yml.
+#
+# Requires:
+#   - secret  CRON_SECRET          must match CRON_SECRET on the API (Render environment)
+#   - variable RENDER_API_URL      optional; falls back to https://rentsync-api.onrender.com
+#
+# The endpoint is idempotent per tenant+period, so a delayed, retried, or duplicated run can never
+# double-bill. Overdue marking also re-runs here, so it happens even while the service is asleep.
+
+name: Generate Invoices
+
+on:
+  schedule:
+    # Every 6 hours, off the hour on purpose — GitHub's scheduler is least congested at :17.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the invoice cron endpoint
+        env:
+          RENDER_API_URL: ${{ vars.RENDER_API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Repository secret CRON_SECRET is not set — add it in Settings > Secrets"
+            exit 1
+          fi
+          base="${RENDER_API_URL:-https://rentsync-api.onrender.com}"
+          url="${base%/}/api/cron/invoices"
+          echo "POST $url"
+          # The secret travels in a header only; the endpoint rejects it in the query string because
+          # URLs leak into access logs. It is never echoed — GitHub masks it in output regardless.
+          code=$(curl -sS -o /tmp/invoices.json -w '%{http_code}' -X POST \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -H 'Content-Type: application/json' \
+            -d '{}' \
+            "$url") || code=000
+          echo "HTTP $code"
+          cat /tmp/invoices.json; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Invoice cron failed with HTTP $code"
+            exit 1
+          fi
