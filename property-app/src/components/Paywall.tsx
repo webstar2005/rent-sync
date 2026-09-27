@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { getBilling, submitPaymentRequest, type BillingState } from '../lib/api/billing';
-import { logout } from '../lib/api/auth';
 
 // Shown instead of the dashboard when the account has not paid.
 //
@@ -10,7 +9,13 @@ import { logout } from '../lib/api/auth';
 // over the M-Pesa confirmation code. It also deliberately does not pretend to know when the
 // payment lands — nothing in the system can know that, because a Send Money transfer carries no
 // reference we can read.
-export default function Paywall({ onActivated }: { onActivated: () => void }) {
+export default function Paywall({
+  onActivated,
+  onSignOut,
+}: {
+  onActivated: () => void;
+  onSignOut: () => void;
+}) {
   const [state, setState] = useState<BillingState | null>(null);
   const [loadError, setLoadError] = useState('');
   const [plan, setPlan] = useState('standard');
@@ -73,7 +78,7 @@ export default function Paywall({ onActivated }: { onActivated: () => void }) {
             </div>
             <button
               type="button"
-              onClick={() => void logout()}
+              onClick={onSignOut}
               className="no-scale rounded-lg border border-[#3A2F33] px-4 py-2 text-sm font-semibold text-[#C9C0C4] transition hover:border-[#C65A70] hover:text-white"
             >
               Sign out

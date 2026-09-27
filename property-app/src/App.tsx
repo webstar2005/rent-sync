@@ -1037,6 +1037,7 @@ export default function App() {
             })
             .catch(() => setSubscriptionStatus('active'));
         }}
+        onSignOut={handleLogout}
       />
     );
   }
