@@ -5,8 +5,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePaid } from '../middleware/subscription.js';
 import { requireOwnerOrAdmin } from '../middleware/role.js';
 import { channelLimiter } from '../middleware/rateLimit.js';
-import { registerChannel, listChannels, getServiceWalletBalance, lowBalanceThreshold, payheroBaseUrl } from '../services/payhero.js';
-import { logger, alertError } from '../utils/logger.js';
+import { registerChannel, listChannels } from '../services/payhero.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -185,47 +185,24 @@ router.post('/:channelId/sync', async (req, res) => {
 });
 
 // NOTE — shared-account disclosure awareness. PayHero service wallets are account-wide: every
-// PaymentChannel on this deployment draws from the SAME prepaid wallet. The balance below is
-// therefore a shared business figure, visible to any authenticated owner. That is by design for a
-// single-operator deployment, but if you ever onboard independent landlords onto one PayHero account,
-// this endpoint must be gated to a primary account holder instead. The 60s cache also stops a polling
-// dashboard from hammering PayHero (and re-raising the low-balance alert on every read).
-const WALLET_CACHE_TTL_MS = 60 * 1000;
-// Cache is skipped under test so suites that swap the PayHero mock see live values each request.
-const WALLET_CACHE_ENABLED = process.env.NODE_ENV !== 'test';
-let walletCache = { at: 0, body: null };
-
-router.get('/wallet', async (req, res) => {
-  try {
-    const now = Date.now();
-    if (WALLET_CACHE_ENABLED && walletCache.body && now - walletCache.at < WALLET_CACHE_TTL_MS) {
-      return res.json(walletCache.body);
-    }
-
-    const balance = await getServiceWalletBalance();
-    const available = Number(balance?.available_balance ?? balance?.balance ?? 0);
-    const threshold = lowBalanceThreshold();
-    const low = available < threshold;
-    if (low) {
-      alertError(`payhero_low_wallet_balance`, new Error(`PayHero service wallet balance KES ${available} is below the KES ${threshold} warning threshold`));
-    }
-    const body = {
-      currency: balance?.currency ?? 'KES',
-      available_balance: available,
-      low,
-      threshold,
-      payhero_base_url: payheroBaseUrl(),
-    };
-    walletCache = { at: now, body };
-    return res.json(body);
-  } catch (error) {
-    if (/not configured|responded/.test(error.message)) {
-      logger.error({ err: error.message }, 'PayHero wallet fetch rejected');
-      return res.status(400).json({ message: 'Could not fetch PayHero wallet balance — check your configuration.' });
-    }
-    logger.error({ err: error.message }, 'Failed to fetch PayHero wallet balance');
-    return res.status(500).json({ message: 'Failed to fetch PayHero wallet balance' });
-  }
-});
+// The PayHero service wallet used to be readable here, and the low-balance flag with it.
+//
+// That balance is the platform's own prepaid float, and it funded the STK push we deleted in
+// 144cff8. Nothing in this product draws on it any more: no push, no payout, no transfer - the only
+// reference left was this read. So the endpoint had one function, reporting a figure nothing could
+// lower, to every paying landlord.
+//
+// The comment that used to sit here said it was visible to any authenticated owner "by design for a
+// single-operator deployment", and that it must be gated to a primary account holder the moment
+// independent landlords shared the account. That is this deployment: two accounts, one platform
+// PayHero account, and a landlord reading our float. The condition the comment set for itself has
+// arrived, so the endpoint goes rather than being locked down - a locked-down reader of a number
+// nothing spends is still a place to accidentally re-open.
+//
+// The low-balance alert went with it for the same reason. It could only fire because landlords
+// happened to load their payment channels, and it watched a float that only STK ever reduced, so it
+// was monitoring the absence of a feature rather than a risk. If PayHero settlement ever needs a
+// funded float again, that is a new endpoint with a new reason to exist, added when there is
+// something to warn about.
 
 export default router;

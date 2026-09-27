@@ -64,7 +64,6 @@ export const env = {
   PAYHERO_ACCOUNT_ID: process.env.PAYHERO_ACCOUNT_ID,
   PAYHERO_WEBHOOK_SECRET: process.env.PAYHERO_WEBHOOK_SECRET,
   PAYHERO_IP_ALLOWLIST: process.env.PAYHERO_IP_ALLOWLIST,
-  PAYHERO_LOW_BALANCE_ALERT: process.env.PAYHERO_LOW_BALANCE_ALERT,
   CORS_ORIGIN: process.env.CORS_ORIGIN,
   // Monthly invoice generation runs in-process (see services/scheduler.js). Both are optional and
   // have defaults; listed here so they are discoverable next to the rest of the configuration.

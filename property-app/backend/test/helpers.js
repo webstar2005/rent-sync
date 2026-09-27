@@ -48,7 +48,6 @@ process.env.PAYHERO_AUTH_TOKEN = process.env.PAYHERO_AUTH_TOKEN || 'test-payhero
 process.env.PAYHERO_ACCOUNT_ID = process.env.PAYHERO_ACCOUNT_ID || '5000';
 process.env.PAYHERO_WEBHOOK_SECRET = process.env.PAYHERO_WEBHOOK_SECRET || 'test-webhook-secret';
 process.env.CRON_SECRET = process.env.CRON_SECRET || 'test-cron-secret';
-process.env.PAYHERO_LOW_BALANCE_ALERT = '500';
 
 import fs from 'node:fs';
 import path from 'node:path';

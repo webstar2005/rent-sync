@@ -112,10 +112,6 @@ function unwrapChannelList(data) {
   return data?.payment_channels ?? data?.data ?? [];
 }
 
-export function getServiceWalletBalance() {
-  return phFetch('/wallets?wallet_type=service_wallet');
-}
-
 export function getTransactionStatus(reference) {
   return phFetch(`/transaction-status?reference=${encodeURIComponent(reference)}`);
 }
@@ -124,10 +120,10 @@ export function getAccountTransactions({ page = 1, perPage = 20 } = {}) {
   return phFetch(`/transactions?page=${page}&per_page=${perPage}`);
 }
 
-export function lowBalanceThreshold() {
-  const n = Number(process.env.PAYHERO_LOW_BALANCE_ALERT || 500);
-  return Number.isFinite(n) && n >= 0 ? n : 500;
-}
+// getServiceWalletBalance() and lowBalanceThreshold() went with the endpoint that read them. The
+// service wallet is the platform's prepaid float, it funded the STK push we removed, and no code
+// path debits it - so the balance it returned could not change and the alert keyed off it could not
+// mean anything. Nothing calls PayHero's /wallets here any more.
 
 // ---- Webhook verification ----
 // PayHero's documented payment callback carries no signature, and their docs describe no way to set a

@@ -69,7 +69,6 @@ Full production env reference (from `backend/.env.example` + the guard in `src/c
 | `LOG_LEVEL` | no | `info` |
 | `GOOGLE_CLIENT_ID` | only if Google Sign-In | your OAuth client id |
 | `PAYHERO_IP_ALLOWLIST` | no | comma-separated, if you lock the webhook to PayHero IPs |
-| `PAYHERO_LOW_BALANCE_ALERT` | no | e.g. `500` (KES) for the service wallet warning |
 | `PAYHERO_BASE_URL` | no | defaults to PayHero v2 sandbox/live URL |
 
 Generate secrets on Windows:

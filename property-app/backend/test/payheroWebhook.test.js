@@ -340,18 +340,21 @@ describe('payment channel registration endpoints (owner-scoped)', () => {
     assert.equal(res.body.payhero_channel_id, '5000');
   });
 
-  it('surfaces the service wallet balance with a low-balance flag', async () => {
+  it('does not let a paying landlord read the platform service wallet balance', async () => {
+    // The service wallet is the platform's own prepaid float. It funded the STK push we deleted,
+    // nothing debits it any more, and it was readable here by any account that had paid - so a
+    // landlord could read our balance. The endpoint is gone rather than admin-gated, because a
+    // locked-down reader of a figure nothing can change is still somewhere to re-open by accident.
+    // This pins the 404 so putting the route back is a deliberate act with a test to update.
     const a = await seedLandlord({ name: 'Amos' });
     setPayHeroMock(makePayHeroMock({ wallet: { currency: 'KES', available_balance: 300, account_id: 5000 } }));
 
-    const res = await request(app).get('/api/payment-channels/wallet').set(auth(a.token)).expect(200);
-    assert.equal(res.body.available_balance, 300);
-    assert.equal(res.body.low, true);
-    assert.equal(res.body.threshold, 500);
+    const res = await request(app).get('/api/payment-channels/wallet').set(auth(a.token)).expect(404);
+    assert.equal(res.body.available_balance, undefined);
 
-    setPayHeroMock(makePayHeroMock({ wallet: { currency: 'KES', available_balance: 15000, account_id: 5000 } }));
-    const healthy = await request(app).get('/api/payment-channels/wallet').set(auth(a.token)).expect(200);
-    assert.equal(healthy.body.low, false);
+    // An admin is not a special case either: there is no platform balance left for anyone to read.
+    const admin = await seedLandlord({ name: 'Admin A', role: 'admin' });
+    await request(app).get('/api/payment-channels/wallet').set(auth(admin.token)).expect(404);
   });
 });
 
