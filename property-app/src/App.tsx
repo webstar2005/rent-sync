@@ -21,6 +21,7 @@ import {
   type TenantStatement,
 } from './lib/api/reports';
 import { BulkTenantImport } from './components/BulkTenantImport';
+import SetupChecklist, { type SetupStep } from './components/SetupChecklist';
 
 type Mode = 'login' | 'register';
 
@@ -278,6 +279,83 @@ export default function App() {
     }
   }
 
+  // Money still owed on an invoice. Computed from completed payments only, so a pending or failed
+  // row never makes an invoice look settled.
+  function outstandingFor(invoice: Invoice) {
+    const paid = payments
+      .filter((payment) => payment.invoice_id === invoice.id && payment.status === 'completed')
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    return Number(invoice.amount) - paid;
+  }
+
+  // The invoice a landlord most likely wants to collect against: the oldest one that still owes
+  // money. Oldest first because that is the arrears they are chasing.
+  function nextInvoiceToCollect() {
+    return (
+      invoices
+        .filter(
+          (invoice) =>
+            invoice.status !== 'paid' &&
+            invoice.status !== 'cancelled' &&
+            outstandingFor(invoice) > 0.005
+        )
+        .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0] ?? null
+    );
+  }
+
+  // Opens a tenant, optionally with the record-payment form already open on a given invoice. This
+  // is what makes "Collect" a single action instead of scroll-to-list, click-tenant, find-invoice,
+  // click-record.
+  function openTenant(tenantId: number, recordInvoiceId?: number) {
+    setSelectedTenantId(tenantId);
+    if (recordInvoiceId === undefined) return;
+    const invoice = invoices.find((candidate) => candidate.id === recordInvoiceId);
+    if (invoice) openRecordPayment(invoice, tenantId, outstandingFor(invoice));
+  }
+
+  function scrollToSection(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // The one action behind the checklist's "Collect" step and the header's Collect button.
+  function startCollecting() {
+    const invoice = nextInvoiceToCollect();
+    if (invoice && invoice.tenant_id !== null) {
+      openTenant(invoice.tenant_id, invoice.id);
+      return;
+    }
+    // Nothing outstanding: point them at the place that would create something to collect.
+    scrollToSection('section-invoices');
+  }
+
+  function handleSetupAction(step: SetupStep) {
+    switch (step) {
+      case 'property':
+        scrollToSection('section-add-property');
+        break;
+      case 'tenant':
+        scrollToSection('section-add-tenant');
+        break;
+      case 'invoice':
+        // Only offer the button when there is something to bill, otherwise generateMonthlyInvoices
+        // finds no candidates and the landlord gets a confusing "0 created".
+        if (tenants.some((tenant) => tenant.status === 'active')) {
+          void handleGenerateInvoices();
+        } else {
+          scrollToSection('section-add-tenant');
+        }
+        break;
+      case 'collect':
+        startCollecting();
+        break;
+      case 'channel':
+        scrollToSection('section-channels');
+        break;
+      default:
+        scrollToSection('section-channels');
+    }
+  }
+
   function openRecordPayment(invoice: Invoice, tenantId: number, outstanding: number) {
     setRecordingInvoiceId(invoice.id);
     setRecordingTenantId(tenantId);
@@ -306,7 +384,7 @@ export default function App() {
     const paidSoFar = payments
       .filter((payment) => payment.invoice_id === invoice.id && payment.status === 'completed')
       .reduce((sum, payment) => sum + Number(payment.amount), 0);
-    const outstanding = Number(invoice.amount) - paidSoFar;
+    const outstanding = outstandingFor(invoice);
 
     // Refuse to overfill the invoice. A mistyped digit here would silently mark rent paid that never
     // arrived, which is the one mistake a rent ledger cannot recover from.
@@ -1096,6 +1174,15 @@ export default function App() {
                 Updated {lastUpdated.toLocaleTimeString()}
               </span>
             )}
+            {/* Collect sits in the header because it is the thing a landlord opens the app to do.
+                The only path to it used to be Needs attention -> tenant -> invoice -> Record. */}
+            <button
+              type="button"
+              onClick={startCollecting}
+              className="rounded-xl bg-[#7A1428] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#8E1A30]"
+            >
+              Collect
+            </button>
             <button
               type="button"
               onClick={handleRefresh}
@@ -1136,15 +1223,19 @@ export default function App() {
           </div>
         </section>
 
-        {properties.length === 0 && (
-          <section className="mb-8 rounded-3xl border border-dashed border-[#7A3B4C] bg-[#1C1618] p-6">
-            <h2 className="text-lg font-semibold text-[#C65A70]">Welcome — set up your first property</h2>
-            <p className="mt-2 text-sm leading-relaxed text-[#C9C0C4]">
-              As a landlord, start by adding a property (name, address, units, rent due day). Each property is independent — tenants, invoices, and payments are scoped to that property. After you add one, the “Collections by property” and “Paid vs unpaid” cards below will populate, and you can import tenants in bulk.
-            </p>
-            <p className="mt-2 text-xs text-[#A49DA1]">Tip: due day 5th means invoices are dated to the 5th, so you can start collecting from the 1st. Use Generate invoices below to create this month's.</p>
-          </section>
-        )}
+        <SetupChecklist
+          state={{
+            hasProperty: properties.length > 0,
+            hasTenant: tenants.length > 0,
+            hasInvoice: invoices.length > 0,
+            hasCollected: payments.some((payment) => payment.status === 'completed'),
+            hasChannel: paymentChannels.length > 0,
+          }}
+          onAction={handleSetupAction}
+          actionContent={{
+            invoice: generatingInvoices ? 'Generating…' : undefined,
+          }}
+        />
 
         <section className="mb-8 grid gap-4 md:grid-cols-4">
           <div className="rounded-3xl border border-[#261F22] bg-[#161112] p-5 shadow-sm">
@@ -1411,9 +1502,9 @@ export default function App() {
           </div>
         </section>
 
-        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-[#F6F2F3]">Recent invoices</h2>
+    <div id="section-invoices" className="mt-8 scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold text-[#F6F2F3]">Recent invoices</h2>
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -1736,8 +1827,8 @@ export default function App() {
           </form>
         </section>
 
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <h2 className="text-xl font-semibold text-[#F6F2F3]">Add property</h2>
+    <section id="section-add-property" className="mt-8 scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+      <h2 className="text-xl font-semibold text-[#F6F2F3]">Add property</h2>
           <form className="mt-4 space-y-4" onSubmit={handlePropertySubmit}>
             <div>
               <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Property name</label>
@@ -1804,10 +1895,10 @@ export default function App() {
           </form>
         </section>
 
-        <div className="mt-8 grid gap-6 xl:grid-cols-2">
-          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold text-[#F6F2F3]">Payment Channels (PayHero)</h2>
+    <div className="mt-8 grid gap-6 xl:grid-cols-2">
+      <section id="section-channels" className="scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-[#F6F2F3]">Payment Channels (PayHero)</h2>
               <button type="button" onClick={loadPaymentChannels} className="rounded-full bg-[#2B1A1E] px-3 py-1.5 text-xs font-semibold text-[#C65A70]">Refresh</button>
             </div>
 
@@ -1887,8 +1978,8 @@ export default function App() {
             )}
           </section>
 
-          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-            <h2 className="text-xl font-semibold text-[#F6F2F3]">Add tenant</h2>
+    <section id="section-add-tenant" className="scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+      <h2 className="text-xl font-semibold text-[#F6F2F3]">Add tenant</h2>
             <form className="mt-4 space-y-4" onSubmit={handleTenantSubmit}>
               <div>
                 <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Property</label>

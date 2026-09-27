@@ -44,12 +44,24 @@ const pool = new pg.Pool({ connectionString: url });
 
 async function reset(client) {
   // Children first so the intent is readable even though the FKs cascade anyway. Each delete is
-  // scoped by the marker this script wrote, never by a name the user could have typed.
+  // scoped by the marker this script wrote, or by an owner lookup -- never by a name the user could
+  // have typed.
+  //
+  // The scheduler also writes invoices, tagged 'Auto-generated rent for YYYY-MM'. Those belong to the
+  // demo owner too, so --reset has to take them or a reset dashboard refills itself on the next tick.
+  const { rows: owners } = await client.query('SELECT id FROM users WHERE email = $1', [DEMO_EMAIL]);
+  const ownerIds = owners.map((row) => row.id);
+  const autoInvoices = `SELECT i.id FROM invoices i
+     JOIN properties p ON p.id = i.property_id
+     WHERE i.notes LIKE 'Auto-generated rent for%' AND p.owner_id = ANY($1::int[])`;
+
   let removed = 0;
   for (const [sql, params] of [
+    [`DELETE FROM payments WHERE invoice_id IN (${autoInvoices})`, [ownerIds]],
     ['DELETE FROM payments WHERE reference = $1', [DEMO_TAG]],
+    [`DELETE FROM invoices WHERE notes LIKE 'Auto-generated rent for%' AND property_id IN (SELECT id FROM properties WHERE owner_id = ANY($1::int[]))`, [ownerIds]],
     ['DELETE FROM invoices WHERE notes = $1', [DEMO_TAG]],
-    ['DELETE FROM tenants WHERE email LIKE $1', ['%@demo.rentsync.test']],
+    ["DELETE FROM tenants WHERE email LIKE $1", ['%@demo.rentsync.test']],
     ['DELETE FROM properties WHERE address = $1', [DEMO_TAG]],
   ]) {
     const { rowCount } = await client.query(sql, params);

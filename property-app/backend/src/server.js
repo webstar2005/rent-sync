@@ -1,5 +1,6 @@
 import { app, pool } from './app.js';
 import { logger, alertError } from './utils/logger.js';
+import { startInvoiceScheduler, stopInvoiceScheduler } from './services/scheduler.js';
 
 // Graceful startup: verify DB before listening (fail fast in prod, warn in dev)
 let server;
@@ -18,9 +19,12 @@ async function start() {
     }
   }
 
-  server = app.listen(process.env.PORT || 4000, () => {
-    logger.info(`Backend listening on http://localhost:${process.env.PORT || 4000} (env=${process.env.NODE_ENV})`);
-  });
+    server = app.listen(process.env.PORT || 4000, () => {
+      logger.info(`Backend listening on http://localhost:${process.env.PORT || 4000} (env=${process.env.NODE_ENV})`);
+      // Monthly rent invoicing runs in-process; see services/scheduler.js for why it is not an
+      // external cron. It ticks shortly after boot and then on an interval, and is idempotent.
+      startInvoiceScheduler();
+    });
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -50,9 +54,10 @@ async function start() {
 start();
 
 // Graceful shutdown + error logging
-function shutdown(signal) {
-  logger.info({ signal }, 'Shutting down gracefully');
-  if (server) {
+  function shutdown(signal) {
+    logger.info({ signal }, 'Shutting down gracefully');
+    stopInvoiceScheduler();
+    if (server) {
     server.close(async () => {
       try {
         await pool.end();
