@@ -275,15 +275,16 @@ Every domain table is owned via a `owner_id` foreign key on `properties` (tenant
 
 - **PayHero** is the payment aggregator. Landlords register **payment channels** (Paybill/Till/Bank) via `POST /api/payment-channels`, which creates them on the PayHero portal too; channels are scoped to the owner, deactivated (not hard-deleted) once they have history.
 - Inbound money arrives via the **PayHero webhook** (`/webhooks/payhero`), verified with `PAYHERO_WEBHOOK_SECRET`. Every callback is persisted to `payhero_callback_log` **before** processing, then matched to the owning channel → supporting tenant → oldest open invoice, credited as a `completion` PaymentHero payment, and the invoice advanced `pending → paid/partial` (unmatched payments are never dropped — they sit flagged for manual review).
-- **STK Push** for outbound prompts exists via PayHero (`services/payhero.js`), driven by a `payheroStkPush` live script for demo.
+- **Rent Sync does not prompt tenants.** `POST /api/payments/request` returns `501` by design. Rent arrives as M-Pesa Send Money into the landlord's own Till/Paybill, which needs no prompt and therefore produces no callback — so the PayHero STK push path, its service function, and its live script were removed rather than left behind a flag that one dashboard edit could switch on. Collection is either PayHero posting the incoming deposit over the webhook, or the landlord recording a payment by hand.
 - `POST /api/reconciliation` lets a landlord manually link a received payment (e.g. a bank transfer or an unmatched mobile-money reference) to a tenant; a matching engine and an alerts feed show unmatched/duplicate/manual-review items.
 - **M-Pesa Daraja API and property-level payment settings were intentionally removed** during cleanup — payment method is now `mobile_money` (PayHero) or manual recording (bank_transfer/cash/card/other).
-- **Needs from client for live use:** PayHero account funded (prepaid wallet), channels verified/active, and (for STK push) the landlord's PIN approval on the receiving phone — plus a deployed URL for the webhook.
+- **Needs from client for live use:** PayHero account funded (prepaid wallet), channels verified/active, and a deployed URL for the webhook. There is no landlord PIN-approval step, because nothing is ever pushed to a tenant's phone.
 
 ### 11.5 Automated invoicing
 
 - `POST /api/invoices/generate` (landlord/admin) and `POST /api/cron/invoices` (system-wide, `x-cron-secret` guard) run `generateMonthlyInvoices`: for every ACTIVE tenant on an ACTIVE property, one `pending` invoice for next month's rent (`due_date` from the property's `rent_due_day`), idempotent per tenant+period (`invoice_number = INV-<tenantId>-<YYYYMM>`).
 - The same job flips unpaid `pending` invoices past their due date to `overdue` (`markOverdueInvoices`); `partial` invoices are left to reconciliation.
+- That job also runs on a timer inside the API process (`services/scheduler.js`, started from `server.js` after a 15s delay, every 6 hours by default), so no external cron service is required. `INVOICE_SCHEDULER_ENABLED=false` disables invoicing without touching the Generate invoices button or the cron route; `INVOICE_SCHEDULER_INTERVAL_HOURS` overrides the interval. Timers are `unref`'d, a failed tick logs and alerts but does not stop later ticks, and it is disabled under `NODE_ENV=test`. Render serves a single instance, so there is no multi-instance double-run risk. Covered by `backend/test/scheduler.test.js` (13 tests).
 - No SMS reminders — that layer was removed (see 11.6).
 
 ### 11.6 SMS / notifications — REMOVED
@@ -318,7 +319,7 @@ The client surfaces these in the dashboard **Reports** card (arrears, 12-month c
 
 - **Tenant portal**: do tenants get their own login to view invoices/pay? (undecided — biggest open decision)
 - **Roles**: confirm exact permission boundaries for manager / staff (e.g. do managers see financial reports?).
-- **PayHero live readiness**: funded wallet, active KYC + verified channels, dedicated webhook URL (currently points at a dev tunnel), STK approval on the landlord's phone.
+- **PayHero live readiness**: funded wallet, active KYC + verified channels, and a dedicated webhook URL (currently points at a dev tunnel). No PIN approval is needed — Rent Sync never initiates a charge.
 - **Hosting & domains**: pick hosts + domains for the marketing site and `app.*`; set `NEXT_PUBLIC_APP_URL` on the marketing site to point at the deployed app.
 - **SMS**: only if client decides on affordance + provider + budget (currently absent on purpose).
 - **Seed/demo data**: the dev DB still holds earlier demo records — clean before handing over.
@@ -405,7 +406,7 @@ Build the Section 11.7 report endpoints (arrears, collection-rate, tenant-statem
 
 **Phase 7 — Security + Cleanup (completed)**
 ```
-Cleanup pass removed: M-Pesa/Daraja STK Push, per-property payment settings (now scoped to landlords via payment_channels), Supabase/RLS/RLS-test scaffolding, and the SMS layer (11.6). Keep the codebase free of them.
+Cleanup pass removed: M-Pesa/Daraja STK Push, the PayHero STK push path and its live script (11.4 — Rent Sync receives rent, it does not prompt a tenant for it), per-property payment settings (now scoped to landlords via payment_channels), Supabase/RLS/RLS-test scaffolding, and the SMS layer (11.6). Keep the codebase free of them.
 ```
 
 ---
