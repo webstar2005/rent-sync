@@ -4,6 +4,7 @@ import { pool, query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePaid } from '../middleware/subscription.js';
 import { bulkLimiter } from '../middleware/rateLimit.js';
+import { requireFeature } from '../middleware/plan.js';
 import { logger } from '../utils/logger.js';
 
 // --- Bulk import helpers (Section 11 Core CRUD phase) ---
@@ -36,7 +37,12 @@ const tenantStatusSchema = z.object({
 router.use(requireAuth, requirePaid);
 
 // Bulk import — single transaction per batch, scoped to organization (owner_id)
-router.post('/bulk', bulkLimiter, async (req, res) => {
+//
+// An Enterprise feature, per the /pricing tier list. Migrating an existing portfolio is a
+// conversation with the client, not something a Basic account can do on its own, so this is the one
+// tenant route that carries a feature gate. The rate limiter stays first because it is about
+// protecting the server, and a limit is a limit whether or not you are entitled to the feature.
+router.post('/bulk', bulkLimiter, requireFeature('bulkImport'), async (req, res) => {
   const rawRows = req.body?.tenants;
   if (!Array.isArray(rawRows) || rawRows.length === 0) {
     return res.status(400).json({ message: 'No tenants provided' });

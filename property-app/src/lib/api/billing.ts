@@ -10,6 +10,29 @@ export type Plan = {
   amount: number | null;
   unitCeiling: number | null;
   unitFloor: number;
+  features: string[];
+};
+
+// A plan's entitlements, resolved by the server from the tier list. Every gated section and button
+// in the dashboard keys off this, so that what a landlord can see and what the API will let them do
+// are read from the same place. A plan is not a level number, and it is not safe to compare those
+// in the client — the server owns the ordering.
+export type Feature =
+  | 'collectionRate'
+  | 'csvExport'
+  | 'maintenance'
+  | 'tenantStatements'
+  | 'reconciliation'
+  | 'bulkImport';
+
+export type Entitlement = {
+  features: Feature[];
+  unitsUsed: number;
+  // The plan's ceiling. Use this rather than subscription.unitsLimit, which is a denormalised copy
+  // on the user row and can lag a plan change. null means the plan is uncapped.
+  unitsLimit: number | null;
+  properties: number;
+  atUnitLimit: boolean;
 };
 
 export type Subscription = {
@@ -41,6 +64,7 @@ export type BillingInfo = {
 
 export type BillingState = {
   subscription: Subscription;
+  entitlement: Entitlement;
   plans: Plan[];
   pendingRequests: PendingRequest[];
   billing: BillingInfo;

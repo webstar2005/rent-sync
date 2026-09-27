@@ -171,6 +171,27 @@ try {
     }
   }
 
+  // A plan that covers fewer units than the landlord already manages is refused, and the refusal
+  // names the number rather than just saying no.
+  //
+  // The cap is enforced on property create and update (services/units.js), so without this a
+  // downgrade would leave an account over its own limit by hundreds of units with no way back: the
+  // code that checks the cap would then block every future edit to every property, including edits
+  // that *reduce* the count only once they were already past the line. Refusing the plan change
+  // keeps the account in a state the rest of the product can reason about.
+  const usage = await client.query(
+    'SELECT COALESCE(SUM(units), 0)::int AS units FROM properties WHERE owner_id = $1',
+    [user.id]
+  );
+  const units = usage.rows[0]?.units ?? 0;
+  if (units > unitsLimit) {
+    die(
+      `${user.email} manages ${units} units, which is over the ${unitsLimit} that ${plan.name} ` +
+        `allows. Move them to a larger plan, or reduce the unit count on their properties first. ` +
+        `Unit count is the sum of properties.units, so editing those is what changes it.`
+    );
+  }
+
   try {
     await client.query('BEGIN');
 

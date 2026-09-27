@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query, withTransaction } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePaid } from '../middleware/subscription.js';
+import { requireFeature } from '../middleware/plan.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
@@ -23,6 +24,15 @@ function normalizeTenantName(value = '') {
 }
 
 router.use(requireAuth, requirePaid);
+
+// The unmatched-payment queue is a Premium-and-up feature, per the /pricing tier list.
+//
+// This is the module a landlord collecting Send Money rent hits hardest, so it is gated at the
+// router: an endpoint added here later should not be reachable by a Basic account by omission.
+//
+// It MUST come after requireAuth - the gate reads the plan off req.user, and ahead of it there is
+// no req.user, which would fail open and hand the feature to everyone.
+router.use(requireFeature('reconciliation'));
 
 router.get('/alerts', async (req, res) => {
   try {

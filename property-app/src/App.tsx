@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { googleLogin, login, logout, register, type AuthUser } from './lib/api/auth';
-import { getBilling } from './lib/api/billing';
+import { getBilling, type Entitlement, type Feature } from './lib/api/billing';
 import { getApiHealth } from './lib/api/client';
 import { createProperty, getProperties, updateProperty, deleteProperty, type Property } from './lib/api/properties';
 import { createTenant, deleteTenant, getTenants, updateTenantStatus, type Tenant } from './lib/api/tenants';
@@ -41,6 +41,14 @@ export default function App() {
   // null = not checked yet. Kept distinct from 'active' so a brief flash of the paywall during
   // sign-in does not happen, and so a billing outage does not lock a paying customer out.
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
+  // What this account's plan entitles it to, as resolved by the server from the published tier list.
+  // Three states, because "we do not know yet" and "billing is down" call for opposite behaviour:
+  //   undefined - not asked yet. Gated sections stay hidden so they do not flash into view and then
+  //               disappear for a Basic landlord as the answer arrives.
+  //   Entitlement - answered. Gated sections are rendered from this list.
+  //   null - billing could not be reached at all. Everything is shown, because hiding paid features
+  //          during our own outage would be worse than briefly showing a section the API will refuse.
+  const [entitlement, setEntitlement] = useState<Entitlement | null | undefined>(undefined);
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -126,6 +134,14 @@ export default function App() {
   const [reportsError, setReportsError] = useState('');
 
   const isLoggedIn = Boolean(localStorage.getItem('property_app_token'));
+
+  // The single source of truth for what this dashboard may render. The API refuses a gated request
+  // with 402 whatever this returns, so being generous here only ever risks a section that fails to
+  // load - it can never expose a feature the plan does not include.
+  const can = (feature: Feature) => {
+    if (entitlement === null) return true; // billing unreachable: fail open rather than lock out
+    return entitlement?.features.includes(feature) ?? false;
+  };
 
   async function handleGoogleCredentialResponse(response: { credential?: string }) {
     if (!response.credential) {
@@ -213,41 +229,63 @@ export default function App() {
     getBilling()
       .then((state) => {
         setSubscriptionStatus(state.subscription.status);
+        setEntitlement(state.entitlement);
         if (state.subscription.status === 'active') {
-          loadProperties();
+          // The entitlement is passed in rather than read back off state: setEntitlement has not
+          // flushed yet inside this callback, so reading it here would still see the previous value
+          // and fire requests the plan does not allow.
+          loadProperties(false, state.entitlement);
           loadPaymentChannels();
           getArrears().then(setArrears).catch(() => setArrears([]));
-          getCollectionRate().then(setCollectionRate).catch(() => undefined);
+          if (state.entitlement.features.includes('collectionRate')) {
+            getCollectionRate().then(setCollectionRate).catch(() => undefined);
+          }
         }
       })
       // A failure here is deliberately swallowed. If billing is unreachable we leave the status null
       // and let the dashboard render: failing closed here would take a paying customer offline
       // because of our own outage, which is worse than briefly showing someone paid-for features.
-      .catch(() => setSubscriptionStatus('active'));
+      .catch(() => {
+        setSubscriptionStatus('active');
+        setEntitlement(null);
+      });
   }, [isLoggedIn]);
 
   // Payments arrive by webhook, so a dashboard that only loads on mount shows a landlord a stale page
   // while they are standing there waiting for a tenant's money to land. Poll quietly so a payment
   // appears on its own; the Refresh button and "Updated" stamp make the timing visible rather than magic.
+  // Billing is re-read on the same beat, so a plan upgraded mid-session brings its sections back
+  // without the landlord having to reload to find out they paid for something.
   useEffect(() => {
     if (!isLoggedIn) return;
     if (subscriptionStatus !== 'active') return;
     const timer = setInterval(() => {
+      getBilling()
+        .then((state) => setEntitlement(state.entitlement))
+        .catch(() => undefined);
       loadProperties(true).then(() => setLastUpdated(new Date())).catch(() => undefined);
     }, 30000);
     return () => clearInterval(timer);
   }, [isLoggedIn, subscriptionStatus]);
 
-  async function loadProperties(silent = false) {
+  async function loadProperties(silent = false, known?: Entitlement | null) {
+    // Called with the freshly-fetched entitlement on the billing path, and with nothing on the poll
+    // and refresh paths, where state is already current.
+    const granted = known === undefined ? entitlement : known;
+    const allowed = (feature: Feature) =>
+      granted === null ? true : (granted?.features.includes(feature) ?? false);
+
     try {
       const [propRes, tenantRes, invoiceRes, paymentRes, maintRes, alertsRes, summaryRes] = await Promise.allSettled([
         getProperties(),
         getTenants(),
         getInvoices(),
         getPayments(),
-        getMaintenanceRequests(),
-        getReconciliationAlerts(),
-        getReconciliationSummary(),
+        // Gated lists are not even requested. Firing them anyway would answer 402 seven times over
+        // and fill the console with stack traces for sections this plan cannot open.
+        allowed('maintenance') ? getMaintenanceRequests() : Promise.resolve([] as MaintenanceRequest[]),
+        allowed('reconciliation') ? getReconciliationAlerts() : Promise.resolve([] as ReconciliationAlert[]),
+        allowed('reconciliation') ? getReconciliationSummary() : Promise.resolve({ unmatched_count: 0, duplicate_count: 0, manual_review_count: 0, matched_count: 0 }),
       ]);
 
       if (propRes.status === 'rejected') throw propRes.reason;
@@ -614,14 +652,16 @@ export default function App() {
     setReportsLoading(true);
     setReportsError('');
     try {
+      // Arrears are on every plan; the collection-rate trend is a Standard-and-up feature. A Basic
+      // landlord still gets their arrears table, just not the trend or its download.
       const [arrearsRes, rateRes] = await Promise.allSettled([
         getArrears(reportPropertyFilter === 'all' ? undefined : reportPropertyFilter),
-        getCollectionRate(),
+        can('collectionRate') ? getCollectionRate() : Promise.resolve(null),
       ]);
       if (arrearsRes.status === 'fulfilled') setArrears(arrearsRes.value);
       else if (reportPropertyFilter === 'all') setArrears([]);
       if (arrearsRes.status === 'rejected') console.warn('arrears failed', arrearsRes.reason);
-      if (rateRes.status === 'fulfilled') setCollectionRate(rateRes.value);
+      if (rateRes.status === 'fulfilled' && rateRes.value) setCollectionRate(rateRes.value);
       if (rateRes.status === 'rejected') console.warn('collection rate failed', rateRes.reason);
       if (arrearsRes.status === 'rejected' && rateRes.status === 'rejected') {
         setReportsError('Unable to load reports — is the backend reachable?');
@@ -633,6 +673,7 @@ export default function App() {
 
   async function handleTenantStatementLoad() {
     if (!reportStatementTenantId) return;
+    if (!can('tenantStatements')) return;
     setReportsError('');
     try {
       setTenantStatement(await getTenantStatement(Number(reportStatementTenantId)));
@@ -1016,9 +1057,13 @@ export default function App() {
           getBilling()
             .then((state) => {
               setSubscriptionStatus(state.subscription.status);
-              if (state.subscription.status === 'active') loadProperties();
+              setEntitlement(state.entitlement);
+              if (state.subscription.status === 'active') loadProperties(false, state.entitlement);
             })
-            .catch(() => setSubscriptionStatus('active'));
+            .catch(() => {
+              setSubscriptionStatus('active');
+              setEntitlement(null);
+            });
         }}
         onSignOut={handleLogout}
       />
@@ -1104,9 +1149,13 @@ export default function App() {
       const partialCount = propertyTenants.filter((tenant) => getTenantRentStatus(tenant).status === 'partial').length;
       const overdueCount = propertyTenants.filter((tenant) => getTenantRentStatus(tenant).status === 'overdue').length;
 
-      return {
-        property,
-        totalUnits: propertyTenants.length,
+        return {
+          property,
+          // The units the landlord declared on the property, not the number of tenant records.
+          // Billing measures the plan ceiling as SUM(properties.units), so counting tenants here
+          // would show a landlord sitting on "4 units" for a block they declared as 50 - and then
+          // refuse their 51st unit with a message quoting a number the dashboard never showed.
+          totalUnits: Number(property.units) || 0,
         paidCount,
         partialCount,
         overdueCount,
@@ -1259,6 +1308,7 @@ export default function App() {
           }}
         />
 
+        {can('reconciliation') && (
         <section className="mb-8 grid gap-4 md:grid-cols-4">
           <div className="rounded-3xl border border-[#261F22] bg-[#161112] p-5 shadow-sm">
             <p className="text-sm font-medium text-[#A99FA3]">Unmatched</p>
@@ -1277,6 +1327,7 @@ export default function App() {
             <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{reconciliationSummary.matched_count}</p>
           </div>
         </section>
+        )}
 
         <div className="grid gap-6 xl:grid-cols-2">
           <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
@@ -1301,8 +1352,15 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-[#B0A8AD] md:grid-cols-4">
-                      <p>Units: {totalUnits}</p>
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-[#B0A8AD] md:grid-cols-4">
+                        <p>
+                          Units: {totalUnits}
+                          {entitlement?.unitsLimit != null && (
+                            <span className={entitlement.atUnitLimit ? 'text-[#F08E9B]' : 'text-[#6F656A]'}>
+                              {' '}of {entitlement.unitsLimit}
+                            </span>
+                          )}
+                        </p>
                       <p>Paid: {paidCount}</p>
                       <p>Partial: {partialCount}</p>
                       <p>Overdue: {overdueCount}</p>
@@ -1731,6 +1789,7 @@ export default function App() {
           </div>
         </div>
 
+        {can('reconciliation') && (
         <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-[#F6F2F3]">Payment alerts</h2>
@@ -1759,7 +1818,9 @@ export default function App() {
             )}
           </div>
         </div>
+        )}
 
+        {can('reconciliation') && (
         <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <h2 className="text-xl font-semibold text-[#F6F2F3]">Manual payment reconciliation</h2>
           <p className="mt-2 text-sm text-[#A99FA3]">Use this when a tenant pays by bank transfer or an unmatched mobile-money reference needs to be linked to the correct tenant.</p>
@@ -1845,11 +1906,12 @@ export default function App() {
               className="w-full rounded-xl bg-[#7A1428] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? 'Reconciling payment...' : 'Match payment to tenant'}
-            </button>
-          </form>
-        </section>
+              </button>
+            </form>
+          </section>
+        )}
 
-    <section id="section-add-property" className="mt-8 scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+      <section id="section-add-property" className="mt-8 scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
       <h2 className="text-xl font-semibold text-[#F6F2F3]">Add property</h2>
           <form className="mt-4 space-y-4" onSubmit={handlePropertySubmit}>
             <div>
@@ -2032,9 +2094,11 @@ export default function App() {
 
         </div>
 
+        {can('bulkImport') && (
         <div className="mt-8">
           <BulkTenantImport properties={properties} tenants={tenants} onImported={handleTenantsImported} />
         </div>
+        )}
 
         {selectedTenant && selectedTenantSummary && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
@@ -2278,7 +2342,12 @@ export default function App() {
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-[#F6F2F3]">Reports</h2>
-              <p className="mt-1 text-sm text-[#A99FA3]">Arrears by property, monthly collection rate, and per-tenant statements — exportable as CSV.</p>
+              <p className="mt-1 text-sm text-[#A99FA3]">
+                Arrears by property
+                {can('collectionRate') ? ', monthly collection rate' : ''}
+                {can('tenantStatements') ? ', and per-tenant statements' : ''}
+                {can('csvExport') ? ' — exportable as CSV' : ''}.
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -2306,20 +2375,26 @@ export default function App() {
               >
                 {reportsLoading ? 'Loading…' : 'Refresh'}
               </button>
-              <button
-                type="button"
-                onClick={() => downloadArrearsCsv(reportPropertyFilter === 'all' ? undefined : reportPropertyFilter)}
-                className="rounded-full border border-[#33282C] bg-[#161112] px-3 py-1.5 text-xs font-semibold text-[#D07387] hover:border-[#7A3B4C]"
-              >
-                Arrears CSV
-              </button>
-              <button
-                type="button"
-                onClick={() => downloadCollectionRateCsv()}
-                className="rounded-full border border-[#33282C] bg-[#161112] px-3 py-1.5 text-xs font-semibold text-[#D07387] hover:border-[#7A3B4C]"
-              >
-                Collection CSV
-              </button>
+              {can('csvExport') && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => downloadArrearsCsv(reportPropertyFilter === 'all' ? undefined : reportPropertyFilter)}
+                  className="rounded-full border border-[#33282C] bg-[#161112] px-3 py-1.5 text-xs font-semibold text-[#D07387] hover:border-[#7A3B4C]"
+                >
+                  Arrears CSV
+                </button>
+                {can('collectionRate') && (
+                <button
+                  type="button"
+                  onClick={() => downloadCollectionRateCsv()}
+                  className="rounded-full border border-[#33282C] bg-[#161112] px-3 py-1.5 text-xs font-semibold text-[#D07387] hover:border-[#7A3B4C]"
+                >
+                  Collection CSV
+                </button>
+                )}
+              </>
+              )}
             </div>
           </div>
 
@@ -2393,6 +2468,7 @@ export default function App() {
               )}
             </div>
 
+            {can('collectionRate') && (
             <div>
               <h3 className="mb-3 text-lg font-semibold text-[#F6F2F3]">Collection rate (12 months)</h3>
               {collectionRate.length === 0 ? (
@@ -2454,8 +2530,10 @@ export default function App() {
                 </>
               )}
             </div>
+            )}
           </div>
 
+          {can('tenantStatements') && (
           <div className="mt-6 rounded-2xl border border-[#2C2326] bg-[#1C1618] p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h3 className="text-lg font-semibold text-[#F6F2F3]">Tenant statement</h3>
@@ -2485,7 +2563,7 @@ export default function App() {
                 >
                   View statement
                 </button>
-                {tenantStatement && (
+                {tenantStatement && can('csvExport') && (
                   <button
                     type="button"
                     onClick={() => downloadTenantStatementCsv(tenantStatement.tenant.id, tenantStatement.tenant.name)}
@@ -2568,8 +2646,10 @@ export default function App() {
               <p className="mt-3 text-sm text-[#A49DA1]">Select a tenant to view their full invoice + payment history with running balance.</p>
             )}
           </div>
+          )}
         </section>
 
+        {can('maintenance') && (
         <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <h2 className="text-xl font-semibold text-[#F6F2F3]">Maintenance</h2>
           <form className="mt-4 grid gap-4 lg:grid-cols-2" onSubmit={handleMaintenanceSubmit}>
@@ -2675,6 +2755,7 @@ export default function App() {
             </div>
           )}
         </section>
+        )}
       </div>
     </div>
   );

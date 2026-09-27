@@ -160,8 +160,11 @@ describe('Reports — collection rate', () => {
 });
 
 describe('Reports — tenant statement', () => {
+  // Per-tenant statements are a Premium feature, so these cases seed a Premium landlord. The gate
+  // itself is pinned in plan.test.js; what matters here is that the statement maths is right for an
+  // account that is entitled to it.
   it('builds invoice + payment history with a running balance', async () => {
-    const A = await seedLandlord({ name: 'Amos' });
+    const A = await seedLandlord({ name: 'Amos', subscription: { plan: 'premium' } });
     const propA = await seedProperty(A.user.id, { name: 'A Complex' });
     const tenant = await seedTenant(propA.id, { name: 'Alice', unit_number: 'AA1', monthly_rent: 10000 });
     const inv1 = await seedInvoice(tenant.id, propA.id, { invoice_number: 'T-1', amount: 10000, due_date: '2026-08-01' });
@@ -189,11 +192,11 @@ describe('Reports — tenant statement', () => {
   });
 
   it('returns 404 for a tenant owned by another landlord', async () => {
-    const A = await seedLandlord({ name: 'Amos' });
+    const A = await seedLandlord({ name: 'Amos', subscription: { plan: 'premium' } });
     const propA = await seedProperty(A.user.id);
     const tenant = await seedTenant(propA.id);
 
-    const B = await seedLandlord({ name: 'Beatrice' });
+    const B = await seedLandlord({ name: 'Beatrice', subscription: { plan: 'premium' } });
     await request(app)
       .get(`/api/reports/tenant-statement/${tenant.id}`)
       .set('Authorization', `Bearer ${B.token}`)
@@ -201,7 +204,7 @@ describe('Reports — tenant statement', () => {
   });
 
   it('exposes CSV via ?format=csv', async () => {
-    const A = await seedLandlord({ name: 'Amos' });
+    const A = await seedLandlord({ name: 'Amos', subscription: { plan: 'premium' } });
     const propA = await seedProperty(A.user.id, { name: 'A Complex' });
     const tenant = await seedTenant(propA.id, { name: 'Alice' });
     await seedInvoice(tenant.id, propA.id, { invoice_number: 'T-1', amount: 10000 });

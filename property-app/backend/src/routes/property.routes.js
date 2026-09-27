@@ -4,6 +4,7 @@ import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePaid } from '../middleware/subscription.js';
 import { requireRole } from '../middleware/role.js';
+import { checkUnitCapacity, unitLimitResponse } from '../services/units.js';
 import { logger } from '../utils/logger.js'
 
 const router = express.Router();
@@ -43,6 +44,15 @@ router.post('/', async (req, res) => {
   try {
     const payload = propertySchema.parse(req.body);
 
+    // The cap is checked before the insert rather than by a database constraint, because the
+    // refusal has to say what the number is and which plan would cover it. A CHECK constraint cannot
+    // do that, and a landlord told only "limit reached" cannot tell whether they are one unit over
+    // or four hundred.
+    const capacity = await checkUnitCapacity({ user: req.user, addingUnits: payload.units ?? 1 });
+    if (!capacity.allowed) {
+      return res.status(409).json(unitLimitResponse({ capacity, user: req.user }));
+    }
+
     const result = await query(
       `INSERT INTO properties (owner_id, name, address, units, rent_due_day, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
@@ -69,6 +79,21 @@ router.patch('/:propertyId', async (req, res) => {
     const check = await query('SELECT id FROM properties WHERE id = $1 AND owner_id = $2', [propertyId, req.user.sub]);
     if (check.rows.length === 0) {
       return res.status(403).json({ message: 'You do not own this property' });
+    }
+
+    // Only the units field can push a landlord over their plan, and only when it goes up: renaming a
+    // property or pushing a rent due date out must never be blocked by a quota. checkUnitCapacity
+    // credits the property's current units back before comparing, so saving a property unchanged
+    // cannot count its own units twice.
+    if (payload.units !== undefined) {
+      const capacity = await checkUnitCapacity({
+        user: req.user,
+        addingUnits: payload.units,
+        replacingPropertyId: propertyId,
+      });
+      if (!capacity.allowed) {
+        return res.status(409).json(unitLimitResponse({ capacity, user: req.user }));
+      }
     }
 
     const fields = [];

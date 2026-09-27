@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePaid } from '../middleware/subscription.js';
+import { requireFeature } from '../middleware/plan.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
@@ -25,6 +26,15 @@ const maintenanceUpdateSchema = z.object({
 });
 
 router.use(requireAuth, requirePaid);
+
+// Maintenance tracking is a Standard-and-up feature, per the /pricing tier list.
+//
+// Applied to the whole router rather than to individual routes so an endpoint added here later
+// cannot accidentally ship ungated: the module either inherits the gate or opts out explicitly.
+//
+// It MUST come after requireAuth - the gate reads the plan off req.user, and ahead of it there is
+// no req.user, which would fail open and hand the feature to everyone.
+router.use(requireFeature('maintenance'));
 
 router.get('/', async (req, res) => {
   try {

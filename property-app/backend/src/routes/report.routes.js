@@ -4,11 +4,22 @@ import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePaid } from '../middleware/subscription.js';
 import { requireOwnerOrAdmin } from '../middleware/role.js';
+import { requireFeature } from '../middleware/plan.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 router.use(requireAuth, requirePaid);
 router.use(requireOwnerOrAdmin);
+
+// CSV is a Standard-and-up feature while the reports on screen are not, so the export is gated on
+// the query parameter rather than the route: a Basic landlord can still read their arrears and
+// collection rate, which is the whole of what their tier promises, but cannot take the data away.
+//
+// The gate is built once here instead of per request, and it MUST stay after requireAuth for the
+// same reason as everywhere else - it reads the plan off req.user.
+const requireCsvExport = requireFeature('csvExport');
+const csvExportIfRequested = (req, res, next) =>
+  req.query.format === 'csv' ? requireCsvExport(req, res, next) : next();
 
 const arrearsSchema = z.object({
   property_id: z.coerce.number().int().optional(),
@@ -60,7 +71,7 @@ function sendCsv(res, filename, rows, columns) {
 // GET /api/reports/arrears
 // Per-property arrears summary for the authenticated owner.
 // ?property_id= scopes to a single property.
-router.get('/arrears', async (req, res) => {
+router.get('/arrears', csvExportIfRequested, async (req, res) => {
   try {
     const params = arrearsSchema.parse(req.query);
 
@@ -112,7 +123,7 @@ router.get('/arrears', async (req, res) => {
 
 // GET /api/reports/collection-rate?months=12
 // Monthly collection rate for the last N months: invoiced vs collected, per month.
-router.get('/collection-rate', async (req, res) => {
+router.get('/collection-rate', requireFeature('collectionRate'), csvExportIfRequested, async (req, res) => {
   try {
     const { months } = collectionRateSchema.parse(req.query);
 
@@ -171,7 +182,7 @@ router.get('/collection-rate', async (req, res) => {
 // GET /api/reports/tenant-statement/:tenantId
 // Invoice + payment history for a specific tenant with running balance.
 // Owner-scoped: returns 404 if tenant belongs to another landlord.
-router.get('/tenant-statement/:tenantId', async (req, res) => {
+router.get('/tenant-statement/:tenantId', requireFeature('tenantStatements'), csvExportIfRequested, async (req, res) => {
   try {
     const tenantId = Number(req.params.tenantId);
     if (!Number.isFinite(tenantId) || tenantId < 1) {

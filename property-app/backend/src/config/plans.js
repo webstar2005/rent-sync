@@ -11,6 +11,7 @@ export const PLANS = {
     amount: 2000,
     unitCeiling: 20,
     unitFloor: 5,
+    rank: 0,
   },
   standard: {
     key: 'standard',
@@ -18,6 +19,7 @@ export const PLANS = {
     amount: 4000,
     unitCeiling: 50,
     unitFloor: 21,
+    rank: 1,
   },
   premium: {
     key: 'premium',
@@ -25,6 +27,7 @@ export const PLANS = {
     amount: 6500,
     unitCeiling: 100,
     unitFloor: 51,
+    rank: 2,
   },
   // Priced by conversation, so it carries no fixed amount and no ceiling.
   enterprise: {
@@ -33,6 +36,7 @@ export const PLANS = {
     amount: null,
     unitCeiling: null,
     unitFloor: 101,
+    rank: 3,
   },
 };
 
@@ -44,6 +48,69 @@ export function isPlanKey(value) {
 
 export function getPlan(key) {
   return isPlanKey(key) ? PLANS[key] : null;
+}
+
+/**
+ * What each plan actually includes, keyed by the feature the rest of the code asks for.
+ *
+ * The matrix is derived from the tier lists published at /pricing, not invented here, so the page
+ * a landlord reads and the gates they hit are the same list. `minRank` rather than `plan` so an
+ * upgrade path is one comparison: Standard includes everything Basic does automatically, because
+ * its rank is higher. Nothing has to be repeated per plan, so a new feature cannot be added to one
+ * tier and forgotten in the next.
+ *
+ * Nothing is listed for `core`. Properties, tenants, invoices, payments and the arrears report are
+ * what the product *is* - a landlord who cannot record a payment cannot use Rent Sync at all, so
+ * every plan gets them and there is no point expressing that as a feature anyone can lose.
+ */
+export const FEATURES = {
+  collectionRate: { key: 'collectionRate', label: 'Collection rate reporting', minRank: 1 },
+  csvExport: { key: 'csvExport', label: 'CSV statement exports', minRank: 1 },
+  maintenance: { key: 'maintenance', label: 'Maintenance request tracking', minRank: 1 },
+  tenantStatements: { key: 'tenantStatements', label: 'Per-tenant statements', minRank: 2 },
+  reconciliation: { key: 'reconciliation', label: 'Unmatched payment reconciliation', minRank: 2 },
+  bulkImport: { key: 'bulkImport', label: 'Bulk tenant import', minRank: 3 },
+};
+
+export const FEATURE_KEYS = Object.keys(FEATURES);
+
+/**
+ * A plan key that grants everything, used for rows whose plan is NULL.
+ *
+ * Migration 010 added `users.plan` with no default, so every account that predates billing has
+ * plan = NULL, and 010 deliberately left those accounts active so nobody lost their own data on
+ * deploy. Migration 012 backfills them to Enterprise. This constant is the belt to that pair of
+ * braces: if the backfill has not run, or a row is written by something that does not know about
+ * plans, an active landlord still has their features instead of a dashboard that is suddenly empty.
+ * Failing open here is safe precisely because the only thing it can leak is a feature, and only to
+ * an account whose status is already 'active'.
+ */
+const FAIL_OPEN_PLAN_KEY = 'enterprise';
+
+export function planKeyFor(user) {
+  if (isPlanKey(user?.plan)) return user.plan;
+  if (user?.plan == null) return FAIL_OPEN_PLAN_KEY;
+  // A plan string we do not recognise is not a licence to hand over everything, but it is also not
+  // something to lock a paying landlord out over, so it gets the top tier and a loud lookup.
+  return FAIL_OPEN_PLAN_KEY;
+}
+
+export function planIncludesFeature(planKey, featureKey) {
+  const feature = FEATURES[featureKey];
+  if (!feature) return false;
+  const plan = getPlan(planKeyFor({ plan: planKey }));
+  return plan ? plan.rank >= feature.minRank : false;
+}
+
+export function featuresForPlan(planKey) {
+  return FEATURE_KEYS.filter((key) => planIncludesFeature(planKey, key));
+}
+
+/** The lowest plan that includes a feature - what the 402 tells the landlord to move to. */
+export function minimumPlanFor(featureKey) {
+  const feature = FEATURES[featureKey];
+  if (!feature) return null;
+  return PLAN_KEYS.find((key) => PLANS[key].rank >= feature.minRank) ?? null;
 }
 
 /**

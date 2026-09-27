@@ -29,6 +29,6 @@ export const faqs: FaqItem[] = [
   {
     question: "How much does it cost?",
     answer:
-      "Pricing is based on how many units you manage, and every plan includes the full feature set: from KES 2,000/month for 5–20 units, up to a custom Enterprise plan for 100+ units. See the pricing page for the full breakdown, or get in touch if you have fewer than 5 units.",
+      "Plans differ both in how many units you manage and in which features you get: from KES 2,000/month for 5–20 units, up to a custom Enterprise plan for 100+ units. Units are counted from the number you declare on each property. See the pricing page for the full breakdown, or get in touch if you have fewer than 5 units.",
   },
 ];

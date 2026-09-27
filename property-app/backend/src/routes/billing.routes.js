@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { generalLimiter } from '../middleware/rateLimit.js';
-import { BILLING, PLANS, isPlanKey } from '../config/plans.js';
+import { BILLING, PLANS, featuresForPlan, getPlan, isPlanKey, planKeyFor } from '../config/plans.js';
+import { unitUsageFor } from '../services/units.js';
 import { logger } from '../utils/logger.js';
 
 // Billing for Rent Sync's own subscription, as opposed to a tenant's rent.
@@ -51,6 +52,14 @@ router.get('/me', async (req, res) => {
       [req.user.id]
     );
 
+    // The feature list and the live unit count go in this response because it is the one call the
+    // dashboard already makes to learn what the account may do. Sending a second request to ask the
+    // same question would mean the UI renders a frame it should not, and a landlord on a slow
+    // connection would see gated sections appear and then vanish.
+    const usage = await unitUsageFor(req.user.id);
+    const planKey = planKeyFor(req.user);
+    const ceiling = getPlan(planKey)?.unitCeiling ?? null;
+
     return res.json({
       subscription: {
         status: row?.subscription_status ?? 'unpaid',
@@ -62,12 +71,23 @@ router.get('/me', async (req, res) => {
         confirmedAt: row?.payment_confirmed_at ?? null,
         reference: row?.payment_reference ?? null,
       },
+      // What this plan entitles them to, and how much of it they have used. unitsLimit is the
+      // plan's ceiling rather than the users.units_limit column, which is a denormalised copy that
+      // can lag a plan change; unitsUsed is what the cap is actually measured against.
+      entitlement: {
+        features: featuresForPlan(planKey),
+        unitsUsed: usage.units,
+        unitsLimit: ceiling,
+        properties: usage.properties,
+        atUnitLimit: ceiling !== null && usage.units >= ceiling,
+      },
       plans: Object.values(PLANS).map((p) => ({
         key: p.key,
         name: p.name,
         amount: p.amount,
         unitCeiling: p.unitCeiling,
         unitFloor: p.unitFloor,
+        features: featuresForPlan(p.key),
       })),
       pendingRequests: pending.rows,
       billing: BILLING,

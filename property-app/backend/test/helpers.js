@@ -124,10 +124,10 @@ export async function seedLandlord({
   return { user: u, token: signToken({ sub: u.id, email: u.email, role: u.role, name: u.name }) };
 }
 
-export async function seedProperty(ownerId, { name = 'Test Property', address = '100 Kenyatta Avenue' } = {}) {
+export async function seedProperty(ownerId, { name = 'Test Property', address = '100 Kenyatta Avenue', units = 4 } = {}) {
   const row = await pool.query(
-    `INSERT INTO properties (owner_id, name, address, units, rent_due_day) VALUES ($1, $2, $3, 4, 5) RETURNING *`,
-    [ownerId, name, address]
+  `INSERT INTO properties (owner_id, name, address, units, rent_due_day) VALUES ($1, $2, $3, $4, 5) RETURNING *`,
+  [ownerId, name, address, units]
   );
   return row.rows[0];
 }

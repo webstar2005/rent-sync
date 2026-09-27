@@ -21,7 +21,8 @@ export function Pricing() {
           <p className="text-xs font-semibold uppercase tracking-widest text-burgundy-600">Pricing</p>
           <h2 className="mt-3 font-heading text-h2 text-ink">Priced by the units you manage</h2>
           <p className="mt-4 text-body text-gray-500">
-            One plan, every feature. Pick the band that matches your portfolio and change it as you grow.
+            Each plan covers a unit band and unlocks the features that go with it. Start at the band
+            that matches your portfolio and move up as you grow.
           </p>
         </div>
 

@@ -12,7 +12,7 @@ export const pricingTiers: PricingTier[] = [
       "Automated monthly invoicing",
       "Tenant records & lease terms",
       "M-Pesa and bank payment matching",
-      "Arrears and collection reports",
+      "Arrears reporting",
     ],
     ctaLabel: "Get Started",
   },
@@ -25,7 +25,6 @@ export const pricingTiers: PricingTier[] = [
     features: [
       "Up to 50 units",
       "Everything in Basic",
-      "Unlimited properties",
       "Collection rate reporting (12 months)",
       "CSV statement exports",
       "Maintenance request tracking",
@@ -42,7 +41,6 @@ export const pricingTiers: PricingTier[] = [
     features: [
       "Up to 100 units",
       "Everything in Standard",
-      "Multi-owner portfolio view",
       "Per-tenant statements with running balance",
       "Unmatched payment reconciliation queue",
       "Priority support",
@@ -57,8 +55,9 @@ export const pricingTiers: PricingTier[] = [
     description: "For 100+ units and estates.",
     features: [
       "Unlimited units",
-      "Dedicated onboarding",
+      "Everything in Premium",
       "Bulk tenant import to migrate your portfolio",
+      "Dedicated onboarding",
       "Custom payment channel setup",
       "Service-level agreement",
     ],
@@ -67,4 +66,6 @@ export const pricingTiers: PricingTier[] = [
 ];
 
 export const pricingFootnote =
-  "Every plan includes the full feature set — the only difference is how many units you manage. Fewer than 5 units? Get in touch and we will price it for you.";
+  "Plans differ in two things: how many units you can manage, and which features you get. " +
+  "Units are counted from what you declare on each property, so one 50-unit block counts as 50 " +
+  "units. Fewer than 5 units? Get in touch and we will price it for you.";
