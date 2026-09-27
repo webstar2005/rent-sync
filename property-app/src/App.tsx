@@ -1789,7 +1789,7 @@ export default function App() {
                 ))}
               </select>
               {propertyErrors.rent_due_day && <p className="mt-1 text-xs text-[#F47C8E]">{propertyErrors.rent_due_day}</p>}
-              <p className="mt-1 text-xs text-[#A49DA1]">Tenants know this day; invoices auto-generate at month-end for next due date (no manual Create invoice).</p>
+              <p className="mt-1 text-xs text-[#A49DA1]">Invoices are dated to this day, so you can start collecting from the 1st. Use Generate invoices on the dashboard to create them.</p>
             </div>
 
             {error && <p className="text-sm text-[#F47C8E]">{error}</p>}
