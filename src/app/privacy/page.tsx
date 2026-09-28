@@ -1,26 +1,16 @@
-import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy — Rent Sync",
+// Stays noindex: the page keeps its original intent, and noindex is why it is absent from the
+// sitemap. Only the duplicated title is fixed.
+export const metadata = pageMetadata({
+  title: "Privacy Policy",
   description: "How Rent Sync handles the personal information we collect from visitors, tenants, and property teams.",
-  alternates: { canonical: "/privacy" },
-  openGraph: {
-    title: "Privacy Policy — Rent Sync",
-    description: "How Rent Sync handles the personal information we collect from visitors, tenants, and property teams.",
-    url: "/privacy",
-    type: "website",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Rent Sync Privacy" }],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Privacy Policy — Rent Sync",
-    description: "How Rent Sync handles the personal information we collect from visitors, tenants, and property teams.",
-    images: ["/opengraph-image"],
-  },
-  robots: { index: false, follow: true },
-};
+  path: "/privacy",
+  imageAlt: "Rent Sync privacy policy",
+  noindex: true,
+});
 
 export default function PrivacyPage() {
   return (

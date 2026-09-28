@@ -66,16 +66,23 @@ export function AccordionTrigger({
   value,
   children,
   className,
+  headingLevel,
 }: {
   value: string;
   children: React.ReactNode;
   className?: string;
+  /**
+   * Wraps the trigger in a heading. An accordion trigger that is only a <button> is invisible to a
+   * document outline, and Google requires a FAQ question to be a heading for FAQPage markup to be
+   * valid. Defaults to 3; the standalone /faqs page passes 2 because it has no section h2 of its own.
+   */
+  headingLevel?: 2 | 3;
 }) {
   const ctx = React.useContext(AccordionContext);
   if (!ctx) throw new Error("AccordionTrigger must be inside Accordion");
   const isOpen = ctx.openId === value;
 
-  return (
+  const button = (
     <button
       type="button"
       aria-expanded={isOpen}
@@ -97,6 +104,13 @@ export function AccordionTrigger({
       />
     </button>
   );
+
+  const Heading = `h${headingLevel ?? 3}` as "h2" | "h3";
+  return (
+    <Heading className="m-0">
+      {button}
+    </Heading>
+  );
 }
 
 export function AccordionContent({
@@ -117,7 +131,16 @@ export function AccordionContent({
       id={`accordion-content-${value}`}
       role="region"
       aria-labelledby={`accordion-trigger-${value}`}
-      hidden={!isOpen}
+      // Keeping the answer in the HTML is what we want for crawlers, but a collapsed panel is still
+      // in the accessibility tree and its links are still tabbable, so a keyboard user would tab
+      // into something they cannot see. `inert` takes it back out of the tab order and the a11y tree
+      // without removing it from the document, which is the part crawlers and no-JS readers need.
+      inert={!isOpen}
+      // No `hidden` attribute while collapsed. It used to be here, and it meant a closed answer was
+      // absent from the served HTML: a crawler that never expanded the accordion saw six questions
+      // and no answers, and FAQPage markup describing that text would have been invalid. The grid
+      // rows below collapse the panel to zero height, so the answer stays in the document while
+      // looking closed.
       className={cn(
         "grid transition-all",
         isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",

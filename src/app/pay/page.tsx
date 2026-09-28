@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { ArrowRight, Check } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -6,28 +5,16 @@ import { contact } from "@/content/contact";
 import { payment } from "@/content/payment";
 import { pricingTiers } from "@/content/pricing";
 import { siteConfig } from "@/content/site";
+import { JsonLd } from "@/components/JsonLd";
+import { breadcrumbSchema, pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Pay for your subscription — Rent Sync",
+export const metadata = pageMetadata({
+  title: "Pay for Your Rent Sync Subscription",
   description:
-    "Pay your Rent Sync subscription by M-Pesa Send Money to 0790 325 943, then submit your confirmation code to switch the account on.",
-  alternates: { canonical: "/pay" },
-  openGraph: {
-    title: "Pay for your subscription — Rent Sync",
-    description:
-      "Pay your Rent Sync subscription by M-Pesa Send Money to 0790 325 943, then submit your confirmation code to switch the account on.",
-    url: "/pay",
-    type: "website",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Rent Sync payment instructions" }],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Pay for your subscription — Rent Sync",
-    description:
-      "Pay your Rent Sync subscription by M-Pesa Send Money to 0790 325 943, then submit your confirmation code to switch the account on.",
-    images: ["/opengraph-image"],
-  },
-};
+    "Pay your Rent Sync subscription by M-Pesa Send Money to 0790 325 943, then submit your confirmation code to activate your account.",
+  path: "/pay",
+  imageAlt: "Rent Sync M-Pesa subscription payment instructions",
+});
 
 /** Enterprise is priced by conversation, so it has no fixed amount to send. */
 const payable = pricingTiers.filter((t) => t.billingUnit);
@@ -37,6 +24,7 @@ export default function PayPage() {
     <>
       <Navbar />
       <main id="main-content" tabIndex={-1}>
+        <JsonLd data={breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Pay", path: "/pay" }])} />
         <section className="bg-white py-16 lg:py-20">
           <div className="mx-auto max-w-content px-6 lg:px-8">
             <div className="mx-auto max-w-3xl">

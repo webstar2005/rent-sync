@@ -1,26 +1,15 @@
-import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Terms of Service — Rent Sync",
+// Stays noindex, matching the sitemap which omits it. Only the duplicated title is fixed.
+export const metadata = pageMetadata({
+  title: "Terms of Service",
   description: "The terms governing use of the Rent Sync website and property management platform.",
-  alternates: { canonical: "/terms" },
-  openGraph: {
-    title: "Terms of Service — Rent Sync",
-    description: "The terms governing use of the Rent Sync website and property management platform.",
-    url: "/terms",
-    type: "website",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Rent Sync Terms" }],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Terms of Service — Rent Sync",
-    description: "The terms governing use of the Rent Sync website and property management platform.",
-    images: ["/opengraph-image"],
-  },
-  robots: { index: false, follow: true },
-};
+  path: "/terms",
+  imageAlt: "Rent Sync terms of service",
+  noindex: true,
+});
 
 export default function TermsPage() {
   return (

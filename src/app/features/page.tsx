@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import {
   BarChart3,
   Building2,
@@ -15,29 +14,16 @@ import {
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { siteConfig } from "@/content/site";
+import { JsonLd } from "@/components/JsonLd";
+import { breadcrumbSchema, pageMetadata } from "@/lib/seo";
 
-const title = "Features — Rent Sync";
-const description =
-  "Six workflows for landlords and property managers in Kenya: automated monthly invoicing, automatic payment matching, arrears and collection reports, tenant records, a multi-property dashboard, and maintenance tracking.";
-
-export const metadata: Metadata = {
-  title,
-  description,
-  alternates: { canonical: "/features" },
-  openGraph: {
-    title,
-    description,
-    url: "/features",
-    type: "website",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Rent Sync Features" }],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title,
-    description,
-    images: ["/opengraph-image"],
-  },
-};
+export const metadata = pageMetadata({
+  title: "Property Management Features",
+  description:
+    "Automated invoicing, M-Pesa payment matching, arrears reports, tenant records, multi-property dashboards and maintenance tracking for Kenyan landlords.",
+  path: "/features",
+  imageAlt: "Rent Sync features for Kenyan landlords",
+});
 
 const detailed = [
   {
@@ -327,6 +313,7 @@ export default function FeaturesPage() {
     <>
       <Navbar />
       <main id="main-content" tabIndex={-1}>
+        <JsonLd data={breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Features", path: "/features" }])} />
         {/* Header */}
         <section className="bg-white py-16 lg:py-20">
           <div className="mx-auto max-w-content px-6 lg:px-8">

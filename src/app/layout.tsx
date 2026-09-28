@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Sora } from "next/font/google";
+import { JsonLd } from "@/components/JsonLd";
+import { organizationSchema, websiteSchema } from "@/lib/seo";
 import "./globals.css";
 
 const inter = Inter({
@@ -16,13 +18,24 @@ const sora = Sora({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rentsync.africa"),
+  // The template supplies the brand, so page titles are the bare page name. It used to be applied on
+  // top of titles that already ended in " - Rent Sync", and every page rendered the brand twice.
   title: {
-    default: "Rent Sync — Run Your Rental Portfolio Without the Spreadsheet Chaos",
+    default: "Rent Sync — Property Management Software for Kenyan Landlords",
     template: "%s | Rent Sync",
   },
   description:
-    "Software for landlords and property managers to track rent, tenants, and payments — all in one place.",
+    "Rent Sync is property management software for Kenyan landlords: track rent, tenants and M-Pesa payments, automate monthly invoicing and see arrears at a glance.",
   applicationName: "Rent Sync",
+  keywords: [
+    "property management software Kenya",
+    "rent tracking software",
+    "tenant management system",
+    "M-Pesa rent collection",
+    "landlord software Nairobi",
+    "rent collection software",
+  ],
+  category: "business",
   alternates: {
     canonical: "/",
   },
@@ -31,23 +44,23 @@ export const metadata: Metadata = {
     locale: "en_KE",
     url: "https://rentsync.africa",
     siteName: "Rent Sync",
-    title: "Rent Sync — Run Your Rental Portfolio Without the Spreadsheet Chaos",
+    title: "Rent Sync — Property Management Software for Kenyan Landlords",
     description:
-      "Software for landlords and property managers to track rent, tenants, and payments — all in one place.",
+      "Rent Sync is property management software for Kenyan landlords: track rent, tenants and M-Pesa payments, automate monthly invoicing and see arrears at a glance.",
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "Rent Sync — Run Your Rental Portfolio Without the Spreadsheet Chaos",
+        alt: "Rent Sync — property management software for Kenyan landlords",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Rent Sync — Run Your Rental Portfolio Without the Spreadsheet Chaos",
+    title: "Rent Sync — Property Management Software for Kenyan Landlords",
     description:
-      "Software for landlords and property managers to track rent, tenants, and payments — all in one place.",
+      "Rent Sync is property management software for Kenyan landlords: track rent, tenants and M-Pesa payments, automate monthly invoicing and see arrears at a glance.",
     images: ["/opengraph-image"],
   },
   robots: {
@@ -66,6 +79,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to content
         </a>
+        {/* Site-wide identity. Declared once here so every page can reference it by @id rather than
+            repeating the whole Organization graph on all seven. */}
+        <JsonLd data={organizationSchema} />
+        <JsonLd data={websiteSchema} />
         {children}
       </body>
     </html>

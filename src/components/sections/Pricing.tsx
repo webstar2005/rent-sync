@@ -11,15 +11,16 @@ import { cn } from "@/lib/utils";
 // eye the way a permanent highlight on one card alongside hover styling on the rest did.
 const DEFAULT_TIER_ID = pricingTiers.find((tier) => tier.highlighted)?.id ?? pricingTiers[0]?.id ?? "";
 
-export function Pricing() {
+export function Pricing({ headingLevel = 2 }: { headingLevel?: 1 | 2 }) {
   const [activeTierId, setActiveTierId] = useState(DEFAULT_TIER_ID);
+  const Heading = `h${headingLevel}` as "h1" | "h2";
 
   return (
     <section id="pricing" className="bg-white py-20 lg:py-28">
       <div className="mx-auto max-w-content px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-burgundy-600">Pricing</p>
-          <h2 className="mt-3 font-heading text-h2 text-ink">Priced by the units you manage</h2>
+          <Heading className="mt-3 font-heading text-h2 text-ink">Priced by the units you manage</Heading>
           <p className="mt-4 text-body text-gray-500">
             Each plan covers a unit band and unlocks the features that go with it. Start at the band
             that matches your portfolio and move up as you grow.

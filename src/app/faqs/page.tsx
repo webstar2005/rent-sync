@@ -4,32 +4,24 @@ import { faqs } from "@/content/faqs";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/Accordion";
 import { siteConfig } from "@/content/site";
 import { contact } from "@/content/contact";
-import type { Metadata } from "next";
+import { JsonLd } from "@/components/JsonLd";
+import { breadcrumbSchema, faqPageSchema, pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "FAQs — Rent Sync",
-  description: "Common questions about Rent Sync — rent collection, tenant payments, data security, managing multiple properties, and pricing.",
-  alternates: { canonical: "/faqs" },
-  openGraph: {
-    title: "FAQs — Rent Sync",
-    description: "Common questions about Rent Sync — rent collection, tenant payments, data security, managing multiple properties, and pricing.",
-    url: "/faqs",
-    type: "website",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Rent Sync FAQs" }],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "FAQs — Rent Sync",
-    description: "Common questions about Rent Sync — rent collection, tenant payments, data security, managing multiple properties, and pricing.",
-    images: ["/opengraph-image"],
-  },
-};
+export const metadata = pageMetadata({
+  title: "Rent Collection FAQs for Landlords",
+  description:
+    "Answers on rent collection, M-Pesa tenant payments, data security, managing multiple properties and pricing for Kenyan landlords using Rent Sync.",
+  path: "/faqs",
+  imageAlt: "Rent Sync frequently asked questions for Kenyan landlords",
+});
 
 export default function FaqsPage() {
   return (
     <>
       <Navbar />
       <main id="main-content" tabIndex={-1}>
+        <JsonLd data={breadcrumbSchema([{ name: "Home", path: "/" }, { name: "FAQs", path: "/faqs" }])} />
+        <JsonLd data={faqPageSchema(faqs)} />
         <section className="bg-white py-16 lg:py-20">
           <div className="mx-auto max-w-content px-6 lg:px-8">
             <p className="text-xs font-semibold uppercase tracking-widest text-burgundy-600">Support</p>
@@ -46,7 +38,11 @@ export default function FaqsPage() {
               <Accordion defaultValue="faq-0">
                 {faqs.map((faq, i) => (
                   <AccordionItem key={faq.question} value={`faq-${i}`}>
-                    <AccordionTrigger value={`faq-${i}`}>{faq.question}</AccordionTrigger>
+                    {/* Heading level 2 here rather than the default 3: this page has an h1 and no
+                        wrapping section h2, so the questions are the next level down. */}
+                    <AccordionTrigger value={`faq-${i}`} headingLevel={2}>
+                      {faq.question}
+                    </AccordionTrigger>
                     <AccordionContent value={`faq-${i}`}>{faq.answer}</AccordionContent>
                   </AccordionItem>
                 ))}
