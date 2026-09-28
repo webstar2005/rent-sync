@@ -1,9 +1,14 @@
 import rateLimit from 'express-rate-limit';
 
-// General API: 100 req / 15 min per IP
+// General API: 600 req / 15 min per client IP.
+//
+// Sized for a browser, not a script. The dashboard polls in the background while a landlord watches
+// for a payment to land, so a real session spends a large share of its budget on reads that a human
+// never initiated; 100/15min throttled paying customers out of their own dashboard. The endpoints
+// that actually need to be tight (auth, bulk writes) keep their own limiters.
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many requests, please try again later' },

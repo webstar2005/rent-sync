@@ -25,6 +25,7 @@ const DEFAULT_INTERVAL_HOURS = 6;
 const STARTUP_DELAY_MS = 15_000;
 
 let timer = null;
+let startupTimer = null;
 
 function isEnabled() {
   if (process.env.INVOICE_SCHEDULER_ENABLED === 'false') return false;
@@ -49,6 +50,14 @@ export function startInvoiceScheduler() {
   if (!isEnabled()) {
     logger.info('Invoice scheduler disabled');
     return null;
+  }
+
+  // startInvoiceScheduler runs again if the process recovers from a port conflict (see server.js).
+  // Returning the live timer keeps a second interval from being created, which would double every
+  // future tick and leave stopInvoiceScheduler unable to clear the first one.
+  if (timer) {
+    logger.info('Invoice scheduler already running');
+    return timer;
   }
 
   const rawHours = process.env.INVOICE_SCHEDULER_INTERVAL_HOURS;
@@ -79,10 +88,11 @@ export function startInvoiceScheduler() {
     }
   };
 
-  const first = setTimeout(() => {
+  startupTimer = setTimeout(() => {
+    startupTimer = null;
     void tick();
   }, STARTUP_DELAY_MS);
-  first.unref?.();
+  startupTimer.unref?.();
 
   timer = setInterval(() => {
     void tick();
@@ -97,5 +107,10 @@ export function stopInvoiceScheduler() {
   if (timer) {
     clearInterval(timer);
     timer = null;
+  }
+  // A pending startup tick would otherwise fire after shutdown and write to a closing pool.
+  if (startupTimer) {
+    clearTimeout(startupTimer);
+    startupTimer = null;
   }
 }

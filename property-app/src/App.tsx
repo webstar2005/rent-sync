@@ -256,16 +256,68 @@ export default function App() {
   // appears on its own; the Refresh button and "Updated" stamp make the timing visible rather than magic.
   // Billing is re-read on the same beat, so a plan upgraded mid-session brings its sections back
   // without the landlord having to reload to find out they paid for something.
+  //
+  // Only the slices that can change without the landlord touching anything are re-read: billing,
+  // invoices and payments. Properties, tenants, maintenance and reconciliation alerts only change
+  // through the UI, so the mount load and the Refresh button already cover them.
+  //
+  // This used to re-run the full seven-endpoint loadProperties() every tick — eight requests every
+  // thirty seconds, which is more than the old 100-per-15-minutes limit allowed per IP. A paying
+  // landlord therefore throttled their own dashboard about a minute after logging in, and because the
+  // errors were swallowed with .catch(() => undefined) the page just quietly stopped updating. Three
+  // reads per tick plus a backoff keeps polling a background detail instead of the app's main event.
   useEffect(() => {
     if (!isLoggedIn) return;
     if (subscriptionStatus !== 'active') return;
-    const timer = setInterval(() => {
-      getBilling()
-        .then((state) => setEntitlement(state.entitlement))
-        .catch(() => undefined);
-      loadProperties(true).then(() => setLastUpdated(new Date())).catch(() => undefined);
-    }, 30000);
-    return () => clearInterval(timer);
+
+    const BASE_MS = 30_000;
+    const MAX_MS = 5 * 60_000;
+    let cancelled = false;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      try {
+        const [billingRes, invoiceRes, paymentRes] = await Promise.allSettled([
+          getBilling(),
+          getInvoices(),
+          getPayments(),
+        ]);
+        if (cancelled) return;
+
+        // A rejected billing read must not clear entitlement, or one flaky request would strip
+        // every paid section off the dashboard.
+        if (billingRes.status === 'fulfilled') setEntitlement(billingRes.value.entitlement);
+        if (invoiceRes.status === 'fulfilled') setInvoices(invoiceRes.value);
+        if (paymentRes.status === 'fulfilled') setPayments(paymentRes.value);
+
+        // Partial success still means we reached the server, so one flaky endpoint should not push
+        // the whole poll into a five-minute backoff.
+        const reached = [billingRes, invoiceRes, paymentRes].some((r) => r.status === 'fulfilled');
+        if (reached) {
+          if (failures > 0) console.info('Dashboard polling recovered');
+          failures = 0;
+          setLastUpdated(new Date());
+        } else {
+          failures += 1;
+        }
+      } catch (err) {
+        failures += 1;
+        if (!cancelled) console.warn('Dashboard poll failed', err);
+      }
+
+      if (cancelled) return;
+      // Back off while the backend is unhealthy or throttling us, so the client waiting on it is not
+      // also the thing keeping it down.
+      const delay = failures === 0 ? BASE_MS : Math.min(BASE_MS * 2 ** failures, MAX_MS);
+      timer = setTimeout(poll, delay);
+    };
+
+    timer = setTimeout(poll, BASE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [isLoggedIn, subscriptionStatus]);
 
   async function loadProperties(silent = false, known?: Entitlement | null) {

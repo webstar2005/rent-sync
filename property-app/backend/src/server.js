@@ -36,6 +36,10 @@ async function start() {
         server.close(() => {
           server = app.listen(process.env.PORT || 4000, () => {
             logger.info(`Backend recovered and listening on http://localhost:${process.env.PORT || 4000}`);
+            // A port conflict means the first listen callback never ran, so the scheduler was never
+            // started. Without this, the process serves traffic healthily while rent invoicing stops
+            // silently until the next deploy. startInvoiceScheduler is idempotent.
+            startInvoiceScheduler();
           });
           server.on('error', (e) => {
             logger.error({ err: e.message }, 'Second listen failed — exiting. Run: taskkill /F /IM node.exe or lsof -ti:4000 | xargs kill');

@@ -144,8 +144,13 @@ export function getAccountTransactions({ page = 1, perPage = 20 } = {}) {
 const WEBHOOK_SECRET_HEADERS = ['x-payhero-secret', 'x-payhero-webhook-secret'];
 
 export function clientIp(req) {
-  // No `trust proxy` is configured, so req.ip is the real socket address — never trust x-forwarded-for
-  // (a plain client can spoof it, and we must not let that bypass a static allowlist).
+  // `trust proxy` is set to a bounded hop count (see app.js) that matches the Cloudflare -> Render
+  // chain, so req.ip is the real client address that Cloudflare inserted, not Cloudflare's own
+  // shared IP and not a value we blindly trust. Because the hop count is bounded rather than
+  // `true`, a client cannot hand us an arbitrary X-Forwarded-For chain to dodge the limiters.
+  // Residual: a request that reaches the Render origin directly, bypassing Cloudflare, could still
+  // forge this value. So an IP allowlist is defense-in-depth on top of the shared secret below, never
+  // the sole control.
   return String(req.ip || '');
 }
 

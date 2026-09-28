@@ -138,19 +138,42 @@ router.post('/reconcile', async (req, res) => {
     const tenant = tenantResult.rows[0];
 
     // The duplicate check, payment insert and invoice transition must commit atomically. A per-tenant
-    // advisory lock serializes concurrent reconciles so the same payment can never be double-counted.
+    // advisory lock serializes concurrent reconciles so two identical in-flight submissions cannot
+    // race each other in; the transaction_ref check below is what actually stops one payment being
+    // counted twice.
     const outcome = await withTransaction(async (client) => {
       await client.query('SELECT pg_advisory_xact_lock($1)', [tenant.id]);
 
-      const duplicateCheck = payload.transaction_ref
-        ? await client.query('SELECT id FROM payments WHERE transaction_ref = $1', [payload.transaction_ref])
-        : await client.query('SELECT id FROM payments WHERE reference = $1 AND tenant_id = $2 AND amount = $3', [payload.reference ?? payload.tenant_name, tenant.id, payload.amount]);
+      // Idempotency needs an identifier the payer controls. `transaction_ref` is exactly that:
+      // PayHero's CheckoutRequestID on a callback, or the bank / mobile-money reference the landlord
+      // typed in. payments.transaction_ref is UNIQUE, so the same reference arriving twice really is
+      // one payment delivered twice, and must not be counted twice.
+      //
+      // When no reference was supplied there is nothing to compare, and the two possible mistakes
+      // are not symmetric. Refusing to record leaves rent unaccounted for and the invoice short, and
+      // nothing in the UI hints that money arrived and was thrown away. Recording a rare
+      // double-count instead leaves two visible rows the landlord can see and delete. So with no
+      // reference we accept the payment.
+      //
+      // This replaces a heuristic that deduped on reference + tenant + amount. For two identical cash
+      // payments — same tenant, same amount, no reference, and `reference` itself fell back to the
+      // tenant name — it rejected the second as a duplicate and discarded real rent. The per-tenant
+      // advisory lock above still serializes concurrent submissions so two identical in-flight
+      // requests cannot race each other in.
+      const transactionRef =
+        typeof payload.transaction_ref === 'string' && payload.transaction_ref.trim().length > 0
+          ? payload.transaction_ref.trim()
+          : null;
+
+      const duplicateCheck = transactionRef
+        ? await client.query('SELECT id FROM payments WHERE transaction_ref = $1', [transactionRef])
+        : { rows: [] };
 
       if (duplicateCheck.rows.length > 0) {
         await client.query(
           `INSERT INTO payment_reconciliation_events (invoice_id, tenant_id, owner_id, payment_method, transaction_ref, raw_payload, match_status)
            VALUES (NULL, $1, $2, $3, $4, $5, 'duplicate')`,
-          [tenant.id, req.user.sub, payload.payment_method, payload.transaction_ref ?? payload.reference ?? `manual-${Date.now()}`, JSON.stringify(payload.raw_payload ?? payload)]
+          [tenant.id, req.user.sub, payload.payment_method, transactionRef, JSON.stringify(payload.raw_payload ?? payload)]
         );
 
         return { duplicate: true };
@@ -190,7 +213,7 @@ router.post('/reconcile', async (req, res) => {
         `INSERT INTO payments (invoice_id, tenant_id, owner_id, amount, payment_method, reference, transaction_ref, status, paid_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', NOW())
          RETURNING *`,
-        [invoice.id, tenant.id, req.user.sub, payload.amount, payload.payment_method, payload.reference ?? payload.tenant_name, payload.transaction_ref ?? `manual-${Date.now()}`]
+        [invoice.id, tenant.id, req.user.sub, payload.amount, payload.payment_method, payload.reference ?? payload.tenant_name, transactionRef]
       );
 
       const totals = await client.query(

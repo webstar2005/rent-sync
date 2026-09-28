@@ -20,6 +20,25 @@ import payheroWebhookRoutes from './routes/payheroWebhook.routes.js';
 
 const app = express();
 
+// How many proxy hops sit between the public internet and this process. This decides which address
+// `req.ip` resolves to, and therefore which address every IP-keyed rate limiter buckets on.
+//
+// Production is Cloudflare in front of Render:
+//   api.rentsync.africa -> rentsync-api.onrender.com
+//     -> gcp-us-west1-1.origin.onrender.com -> .cdn.cloudflare.net
+// so a request arrives as client -> Cloudflare -> this process and the real client IP is the
+// *second-to-last* X-Forwarded-For entry. With no trust proxy at all, `req.ip` collapses to
+// Cloudflare's single shared address and every visitor on earth shares one rate-limit bucket, which
+// is how a paying landlord's own dashboard polling used to lock itself out. A hop count of 1 would
+// reproduce that exact bug, so the default is 2 to match the observed chain.
+//
+// Deliberately a bounded hop count and never `true`: `true` trusts whatever X-Forwarded-For a
+// client sends, so anyone could rotate a forged value per request and get an unlimited number of
+// buckets. Override with TRUST_PROXY_HOPS if the edge changes (e.g. Cloudflare set to DNS-only drops
+// a hop and makes this 1). 0 is a valid value meaning "trust no proxy".
+const TRUST_PROXY_HOPS = Number.parseInt(process.env.TRUST_PROXY_HOPS ?? '2', 10);
+app.set('trust proxy', Number.isFinite(TRUST_PROXY_HOPS) && TRUST_PROXY_HOPS >= 0 ? TRUST_PROXY_HOPS : 2);
+
 app.use(httpLogger);
 
 // Fail-closed CORS: unless CORS_ORIGIN is explicitly configured we send NO cross-origin headers, so
@@ -40,7 +59,11 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '1mb' }));
-// General abuse protection (100 req / 15 min) — skip health
+// General abuse protection — skip health (/health is mounted outside /api so it is not counted).
+// The ceiling is sized for the dashboard's background poll, not for a single API call: an open
+// dashboard polls on an interval, so a landlord who simply leaves the tab open all afternoon would
+// otherwise be throttled for looking. Auth and bulk endpoints keep their own much stricter limiters
+// below, so raising this does not weaken brute-force protection.
 app.use('/api', generalLimiter);
 
 app.get('/health', async (req, res) => {
