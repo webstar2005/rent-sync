@@ -4,6 +4,7 @@ import { googleLogin, login, logout, register, type AuthUser } from './lib/api/a
 import { getBilling, type Entitlement, type Feature } from './lib/api/billing';
 import { getApiHealth } from './lib/api/client';
 import { createProperty, getProperties, updateProperty, deleteProperty, type Property } from './lib/api/properties';
+import { kes } from './lib/format';
 import { createTenant, deleteTenant, getTenants, updateTenantStatus, type Tenant } from './lib/api/tenants';
 import { getInvoices, generateInvoices, type Invoice } from './lib/api/invoices';
 import { getPayments, createPayment, type Payment } from './lib/api/payments';
@@ -23,16 +24,10 @@ import {
 } from './lib/api/reports';
 import { BulkTenantImport } from './components/BulkTenantImport';
 import SetupChecklist, { type SetupStep } from './components/SetupChecklist';
+import PropertyUnits from './components/PropertyUnits';
 import Paywall from './components/Paywall';
 
 type Mode = 'login' | 'register';
-
-// Every amount in this product is Kenyan shillings. Formatting in one place keeps the symbol
-// consistent and groups thousands, which matters once a landlord is looking at six figures of rent.
-function kes(value: number | string | null | undefined): string {
-  const amount = Number(value ?? 0);
-  return `KES ${amount.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('login');
@@ -50,6 +45,9 @@ export default function App() {
   //          during our own outage would be worse than briefly showing a section the API will refuse.
   const [entitlement, setEntitlement] = useState<Entitlement | null | undefined>(undefined);
   const [properties, setProperties] = useState<Property[]>([]);
+  // Which property's units are open in the PropertyUnits panel. App owns it because the Units
+  // button on a property card is what sets it.
+  const [selectedPropertyForUnits, setSelectedPropertyForUnits] = useState<number | null>(null);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -1445,6 +1443,17 @@ export default function App() {
                     <div className="mt-4 flex gap-2">
                       <button
                         type="button"
+                        onClick={() => setSelectedPropertyForUnits(property.id)}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                          selectedPropertyForUnits === property.id
+                            ? 'border-[#7A3B4C] bg-[#2B1A1E] text-[#C65A70]'
+                            : 'border-[#33282C] bg-[#161112] text-[#CFC5CA] hover:border-[#7A3B4C] hover:text-[#C65A70]'
+                        }`}
+                      >
+                        Units
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handlePropertyEditStart(property)}
                         className="rounded-full border border-[#33282C] bg-[#161112] px-3 py-1 text-xs font-medium text-[#CFC5CA] hover:border-[#7A3B4C] hover:text-[#C65A70]"
                       >
@@ -1504,10 +1513,21 @@ export default function App() {
                       </form>
                     )}
                   </div>
-                ))}
+))}
               </div>
             )}
           </section>
+
+          {/* Units section for selected property */}
+          {selectedPropertyForUnits && (
+            <PropertyUnits
+              key={selectedPropertyForUnits}
+              propertyId={selectedPropertyForUnits}
+              properties={properties}
+              tenants={tenants}
+              onUnitsChanged={() => { void loadProperties(true); }}
+            />
+          )}
 
           <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
             <div className="mb-4 flex flex-col gap-3">
@@ -1870,9 +1890,9 @@ export default function App() {
             )}
           </div>
         </div>
-        )}
+      )}
 
-        {can('reconciliation') && (
+      {can('reconciliation') && (
         <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <h2 className="text-xl font-semibold text-[#F6F2F3]">Manual payment reconciliation</h2>
           <p className="mt-2 text-sm text-[#A99FA3]">Use this when a tenant pays by bank transfer or an unmatched mobile-money reference needs to be linked to the correct tenant.</p>
@@ -2389,6 +2409,7 @@ export default function App() {
             </div>
           </div>
         )}
+
 
         <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

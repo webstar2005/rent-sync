@@ -7,6 +7,7 @@ import { logger, httpLogger, alertError } from './utils/logger.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import authRoutes from './routes/auth.routes.js';
 import propertyRoutes from './routes/property.routes.js';
+import unitRoutes from './routes/units.routes.js';
 import tenantRoutes from './routes/tenant.routes.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
@@ -126,6 +127,7 @@ app.use('/api/auth', authRoutes);
 // has to be able to read what they owe and submit their M-Pesa confirmation code.
 app.use('/api/billing', billingRoutes);
 app.use('/api/properties', propertyRoutes);
+app.use('/api/units', unitRoutes);
 app.use('/api/tenants', tenantRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payments', paymentRoutes);

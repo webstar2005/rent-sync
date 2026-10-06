@@ -85,9 +85,12 @@ describe('invoice scheduler', () => {
         tenant.id,
       ]);
       assert.equal(rows.length, 2);
+      // The default cycle month is "next month", so it cannot be a literal — a fixed value here
+      // would rot the test every time the calendar moves past the month it was written against.
+      const { year, month } = parseMonth('');
       assert.deepEqual(rows.map((r) => r.invoice_number), [
         `INV-${tenant.id}-202603`,
-        `INV-${tenant.id}-202610`,
+        `INV-${tenant.id}-${year}${String(month).padStart(2, '0')}`,
       ]);
     });
 
