@@ -131,6 +131,7 @@ export default function App() {
   const [reportPropertyFilter, setReportPropertyFilter] = useState<'all' | number>('all');
   const [reportStatementTenantId, setReportStatementTenantId] = useState<number | ''>('');
   const [tenantStatement, setTenantStatement] = useState<TenantStatement | null>(null);
+  const [tenantRosterSearch, setTenantRosterSearch] = useState('');
   const [reportsLoading, setReportsLoading] = useState(false);
   const [reportsError, setReportsError] = useState('');
 
@@ -943,6 +944,30 @@ export default function App() {
 
   const activeTenants = useMemo(() => tenants.filter((t) => t.status === 'active'), [tenants]);
 
+  // Every tenant, every status, across every property - the roster is the landlord's own record of
+  // who lives where, so someone who moved out stays findable rather than disappearing the moment
+  // their status changes (the sections that drive money still filter to active; see activeTenants).
+  // Ordered by building then unit, with unit numbers compared as numbers so "2" does not sort after
+  // "10", because that is the order a landlord walks the block in.
+  const tenantRoster = useMemo(() => {
+    const needle = tenantRosterSearch.trim().toLowerCase();
+    return tenants
+      .filter(
+        (t) =>
+          !needle ||
+          t.name.toLowerCase().includes(needle) ||
+          (t.property_name ?? '').toLowerCase().includes(needle) ||
+          t.unit_number.toLowerCase().includes(needle) ||
+          (t.phone ?? '').toLowerCase().includes(needle)
+      )
+      .sort(
+        (a, b) =>
+          (a.property_name ?? '').localeCompare(b.property_name ?? '') ||
+          a.unit_number.localeCompare(b.unit_number, undefined, { numeric: true }) ||
+          a.name.localeCompare(b.name)
+      );
+  }, [tenants, tenantRosterSearch]);
+
   const maintenanceActionQueue = useMemo(() => {
     const order: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
     return [...maintenance]
@@ -1381,6 +1406,71 @@ export default function App() {
           </div>
         </section>
         )}
+
+        <section className="mb-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-[#F6F2F3]">Tenants</h2>
+            <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{tenants.length} total</span>
+          </div>
+
+          <input
+            value={tenantRosterSearch}
+            onChange={(event) => setTenantRosterSearch(event.target.value)}
+            placeholder="Search tenant, property, unit or phone..."
+            className="mb-4 w-full rounded-xl border border-[#261F22] bg-[#1C1618] px-3 py-2.5 text-sm text-[#C9C0C4] outline-none ring-0 sm:max-w-md"
+          />
+
+          {tenants.length === 0 ? (
+            <p className="text-[#A49DA1]">
+              No tenants yet. Add one by hand or bulk import a list - either way they land here with
+              their property, unit and monthly rent.
+            </p>
+          ) : tenantRoster.length === 0 ? (
+            <p className="text-[#A49DA1]">No tenant matches "{tenantRosterSearch.trim()}".</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-[#A99FA3]">
+                    <th className="px-3 py-2 font-medium">Tenant</th>
+                    <th className="px-3 py-2 font-medium">Property</th>
+                    <th className="px-3 py-2 font-medium">Unit</th>
+                    <th className="px-3 py-2 font-medium">Monthly rent</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenantRoster.map((tenant) => (
+                    <tr key={tenant.id} className="border-t border-[#2A2225]">
+                      <td className="px-3 py-2">
+                        <span className="font-medium text-[#F6F2F3]">{tenant.name}</span>
+                        {tenant.phone && <span className="ml-2 text-xs text-[#A49DA1]">{tenant.phone}</span>}
+                      </td>
+                      <td className="px-3 py-2 text-[#D9D2D6]">{tenant.property_name ?? 'Unknown property'}</td>
+                      <td className="px-3 py-2 font-medium text-[#F6F2F3]">{tenant.unit_number}</td>
+                      <td className="px-3 py-2 text-[#D9D2D6]">{kes(tenant.monthly_rent)}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            tenant.status === 'active'
+                              ? 'bg-[#14211B] text-[#4ADE80]'
+                              : tenant.status === 'pending'
+                                ? 'bg-[#2B2116] text-[#F0B84B]'
+                                : tenant.status === 'moved_out'
+                                  ? 'bg-[#33161B] text-[#F08E9B]'
+                                  : 'bg-[#2B1A1E] text-[#C65A70]'
+                          }`}
+                        >
+                          {tenant.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <div className="grid gap-6 xl:grid-cols-2">
           <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
