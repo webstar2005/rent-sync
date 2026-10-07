@@ -1,60 +1,426 @@
 @import "tailwindcss";
 
-@theme inline {
-  --color-burgundy-50: #2B1A1E;
-  --color-burgundy-600: #B32743;
-  --color-burgundy-700: #D07387;
-  --color-ink: #F6F2F3;
-  --color-gray-100: #221C1E;
-  --color-gray-500: #A49DA1;
-  --color-gray-900: #F6F2F3;
-  --color-background: #0D0A0B;
-  --color-foreground: #F6F2F3;
-  --font-heading: var(--font-heading);
-  --font-body: var(--font-body);
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 20px;
+/* ------------------------------------------------------------------
+   Design tokens
+   Dark is the default theme (#0D0D0D). Light mode applies the same
+   tokens through [data-theme="light"]. Every colour the UI uses
+   flows through these variables, so the toggle is one attribute on
+   <html> and nothing else re-renders.
+   ------------------------------------------------------------------ */
+@layer base {
+  :root {
+    color-scheme: dark;
+
+    /* Canonical anchors the rest of the palette derives from. */
+    --color-bg: #0d0d0d;
+    --color-button: #f3f4f6;
+    --color-button-text: #0d0d0d;
+
+    /* Surfaces lift slightly off the page so cards read at a glance.
+       The sidebar rail is the darker edge. */
+    --bg-page: var(--color-bg);
+    --bg-card: rgba(255, 255, 255, 0.055);
+    --bg-subtle: rgba(255, 255, 255, 0.09);
+    --bg-hover: rgba(255, 255, 255, 0.08);
+    --bg-input: rgba(255, 255, 255, 0.06);
+    /* Solid variant for overlays (drawers, modals) where nothing
+       opaque sits behind the panel. */
+    --bg-card-solid: #1a1a1a;
+
+    --border: rgba(255, 255, 255, 0.14);
+    --border-strong: rgba(255, 255, 255, 0.26);
+    /* Hairline that keeps inputs and outlined buttons visible against
+       the base: ~3.3:1, measured in check.cjs. */
+    --border-control: rgba(255, 255, 255, 0.54);
+    --border-hover: rgba(255, 255, 255, 0.7);
+
+    --text: #ffffff;
+    --text-heading: #ffffff;
+    --text-muted: rgba(255, 255, 255, 0.85);
+    --text-faint: rgba(255, 255, 255, 0.72);
+
+    /* Icon rail + detail panel in the dashboard sidebar. */
+    --sidebar-bg: rgba(0, 0, 0, 0.4);
+    --sidebar-panel: rgba(255, 255, 255, 0.04);
+    /* Solid variant for overlays (mobile nav drawer) where nothing
+       opaque sits behind the panel. */
+    --bg-panel-solid: #171717;
+    --sidebar-text: #ffffff;
+    --sidebar-muted: rgba(255, 255, 255, 0.78);
+    --sidebar-active: rgba(255, 255, 255, 0.14);
+    --sidebar-active-text: #ffffff;
+
+    /* Light accent: links, active tabs, focus rings, and text
+       highlights on dark surfaces. --accent-text is the ink used on
+       light accent fills. */
+    --accent: #dde6ed;
+    --accent-hover: #c9d5df;
+    --accent-soft: rgba(255, 255, 255, 0.08);
+    --accent-text: #0d0d0d;
+
+    --color-button-hover: #d9dde3;
+    --color-button-active: #b9c0ca;
+
+    --kpi-blue: #60a5fa;
+    --kpi-green: #4ade80;
+    --kpi-amber: #fbbf24;
+    --kpi-red: #f87171;
+
+    /* Light status chips keep their usual pastels: they are high
+       contrast against the dark cards. */
+    --success-soft: #ecfdf3;
+    --success-text: #027a48;
+    --warning-soft: #fffaeb;
+    --warning-text: #b54708;
+    --danger-soft: #fef3f2;
+    --danger-text: #b42318;
+    --info-soft: #eff8ff;
+    --info-text: #175cd3;
+    --neutral-soft: #f2f4f7;
+    --neutral-text: #475467;
+
+    /* Inline error / success notes (not chips). */
+    --error-text: #fca5a5;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+    --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.7);
+
+    --skeleton: rgba(255, 255, 255, 0.12);
+
+    /* Overview stat pills: a dark ramp, lightest last so the
+       stacked pills separate visually. */
+    --shade-1: #111418;
+    --shade-2: #1b2a35;
+    --shade-3: #33475a;
+    --shade-4: #4c5f70;
+
+    --ring: rgba(221, 230, 237, 0.3);
+
+    --stat-band: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(0, 0, 0, 0.28) 100%);
+    --bg-option: #1a1a1a;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+
+    --color-bg: #ffffff;
+    --color-button: #253745;
+    --color-button-text: #ffffff;
+
+    --bg-page: var(--color-bg);
+    --bg-card: #f8fafc;
+    --bg-subtle: #f1f5f9;
+    --bg-hover: rgba(15, 23, 42, 0.05);
+    --bg-input: #ffffff;
+    --bg-card-solid: #f8fafc;
+
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --border-control: rgba(15, 23, 42, 0.45);
+    --border-hover: rgba(15, 23, 42, 0.65);
+
+    --text: #0f172a;
+    --text-heading: #0f172a;
+    --text-muted: rgba(15, 23, 42, 0.72);
+    --text-faint: rgba(15, 23, 42, 0.62);
+
+    --sidebar-bg: #f1f5f9;
+    --sidebar-panel: #f8fafc;
+    --bg-panel-solid: #f8fafc;
+    --sidebar-text: #0f172a;
+    --sidebar-muted: rgba(15, 23, 42, 0.6);
+    --sidebar-active: #253745;
+    --sidebar-active-text: #ffffff;
+
+    --accent: #253745;
+    --accent-hover: #1b2a35;
+    --accent-soft: #e8edf3;
+    --accent-text: #ffffff;
+
+    --color-button-hover: #2f4658;
+    --color-button-active: #1b2a35;
+
+    --kpi-blue: #2563eb;
+    --kpi-green: #16a34a;
+    --kpi-amber: #d97706;
+    --kpi-red: #dc2626;
+
+    --success-soft: #ecfdf3;
+    --success-text: #027a48;
+    --warning-soft: #fffaeb;
+    --warning-text: #b54708;
+    --danger-soft: #fef3f2;
+    --danger-text: #b42318;
+    --info-soft: #eff8ff;
+    --info-text: #175cd3;
+    --neutral-soft: #f2f4f7;
+    --neutral-text: #475467;
+
+    --error-text: #b42318;
+
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+    --shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.18);
+
+    --skeleton: rgba(15, 23, 42, 0.08);
+
+    /* Same dark ramp reads as deliberate swatches on white. */
+    --shade-1: #111418;
+    --shade-2: #1b2a35;
+    --shade-3: #33475a;
+    --shade-4: #4c5f70;
+
+    --ring: rgba(37, 55, 69, 0.3);
+
+    --stat-band: linear-gradient(180deg, rgba(37, 55, 69, 0.05) 0%, rgba(37, 55, 69, 0.1) 100%);
+    --bg-option: #f8fafc;
+  }
 }
 
-:root { color-scheme: dark; }
-* { border-color: #2A2225; }
-html { scroll-behavior: smooth; }
-body {
-  background: linear-gradient(180deg, #0D0A0B 0%, #110D0F 36%, #141012 100%);
-  color: var(--color-gray-900);
-  font-family: var(--font-body), system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+/* Tailwind colour utilities resolve through the variables above, so
+   `bg-card` / `text-muted` / `border-line` swap with the palette. */
+@theme inline {
+  --color-page: var(--bg-page);
+  --color-card: var(--bg-card);
+  --color-subtle: var(--bg-subtle);
+  --color-hover: var(--bg-hover);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-control: var(--border-control);
+  --color-ink: var(--text);
+  --color-heading: var(--text-heading);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-navy: var(--sidebar-bg);
+  --color-panel: var(--sidebar-panel);
+  --color-navy-text: var(--sidebar-text);
+  --color-navy-muted: var(--sidebar-muted);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-text);
+  --color-skeleton: var(--skeleton);
 }
-h1, h2, h3, h4 { font-family: var(--font-heading), sans-serif; color: var(--color-ink); font-weight: 700; letter-spacing: -0.015em; }
-:focus-visible { outline: 2px solid var(--color-burgundy-600); outline-offset: 2px; }
-::selection { background: var(--color-burgundy-50); color: var(--color-burgundy-700); }
-::placeholder { color: #6E6468; }
-input, select, textarea, button { transition: all 180ms ease; }
-/* Buttons lift on hover as a subtle affordance.
-   Excluded on purpose, because this rule is UNLAYERED and therefore outranks
-   Tailwind's layered utilities:
-   - .absolute  - `position: relative` below would override the button's own
-                  positioning and yank it out of the field/card it sits inside.
-   - .w-full    - scaling a full-width button overflows its container on both
-                  sides, so its edges stop lining up with the surrounding box.
-   - .no-scale  - explicit opt-out (Login/Register and Save/Cancel pairs).
-   Keep that in mind when adding a positioned or full-width button: give it a
-   class listed above, or it will pick up the wrong transform. */
-button:not(:disabled):not(.no-scale):not(.w-full):not(.absolute):hover {
-  position: relative;
-  z-index: 1;
-  transform: scale(1.06);
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--bg-page);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: inherit;
+    color: var(--text-heading);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+
+  ::placeholder {
+    color: var(--text-faint);
+  }
+
+  select option {
+    background: var(--bg-option);
+    color: var(--text);
+  }
 }
-button:not(:disabled):not(.no-scale):not(.w-full):not(.absolute):active {
-  transform: scale(0.98);
+
+@layer components {
+  /* Small uppercase label that sits above a value or field. */
+  .rs-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* Field chrome shared by inputs, selects and textareas. */
+  .rs-field {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--border-control);
+    border-radius: 10px;
+    background: var(--bg-input);
+    padding: 9px 12px;
+    font-size: 14px;
+    color: var(--text);
+    transition: border-color 140ms ease, box-shadow 140ms ease;
+  }
+
+  .rs-field:hover {
+    border-color: var(--border-hover);
+  }
+
+  .rs-field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+
+  .rs-field[aria-invalid="true"] {
+    border-color: var(--kpi-red);
+  }
+
+  /* Horizontal scroll lives inside a card, never on the page. */
+  .rs-scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+   /* ----------------------------------------------------------------
+      Overview stats: four compact rounded swatches, each one shade
+      of the slate ramp, laid out on a gap grid (never overlapping).
+      ---------------------------------------------------------------- */
+   .rs-stat-band {
+    background: var(--stat-band);
+    border-radius: 28px;
+    padding: 16px;
+  }
+
+  .rs-stats {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .rs-stats > * {
+    min-width: 0;
+  }
+
+  @media (min-width: 640px) {
+    .rs-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .rs-stats {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .rs-stat {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 76px;
+    padding: 14px 24px;
+    border-radius: 18px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    transition: transform 160ms ease, box-shadow 160ms ease;
+  }
+
+  .rs-stat:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  }
+
+  .rs-stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+
+  .rs-stat-value {
+    font-size: 1.25rem;
+    line-height: 1.15;
+    font-weight: 600;
+    white-space: nowrap;
+    letter-spacing: -0.01em;
+  }
+
+  .rs-stat--1 {
+    background: var(--shade-1);
+    color: #ffffff;
+  }
+
+  .rs-stat--2 {
+    background: var(--shade-2);
+    color: #ffffff;
+  }
+
+  .rs-stat--3 {
+    background: var(--shade-3);
+    color: #ffffff;
+  }
+
+  .rs-stat--4 {
+    background: var(--shade-4);
+    color: #ffffff;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rs-stat {
+      transition: none;
+    }
+
+    .rs-stat:hover {
+      transform: none;
+    }
+  }
+
+  /* Sidebar detail panel collapses with a width + visibility transition
+     so its contents leave the tab order while hidden. */
+  .rs-panel {
+    transition: width 220ms ease, visibility 0s linear 0s;
+  }
+
+  .rs-panel[data-collapsed="true"] {
+    width: 0 !important;
+    visibility: hidden;
+    transition: width 220ms ease, visibility 0s linear 220ms;
+  }
+
+  /* Group disclosure animation: height via the grid-rows trick. */
+  .rs-group {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 200ms ease, opacity 200ms ease;
+    opacity: 0;
+  }
+
+  .rs-group[data-open="true"] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  .rs-group > div {
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rs-panel,
+    .rs-group,
+    .rs-group > div {
+      transition: none !important;
+    }
+  }
 }
-#google-signin-wrap { transition: transform 180ms ease; }
-#google-signin-wrap:hover {
-  z-index: 1;
-  transform: scale(1.06);
-}
-select option { background: #161112; color: #F6F2F3; }

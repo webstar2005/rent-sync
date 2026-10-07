@@ -66,35 +66,35 @@ export default function Paywall({
   const hasPending = (state?.pendingRequests.length ?? 0) > 0;
 
   return (
-    <div className="min-h-screen bg-[#0D0A0B] px-4 py-10 text-[#F6F2F3]">
+    <div className="min-h-screen bg-page px-4 py-10 text-ink">
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-3xl border border-[#261F22] bg-[#161112] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+        <div className="rounded-3xl border border-line bg-card p-8 shadow-[var(--shadow-modal)]">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#C65A70]">Rent Sync</p>
-              <h1 className="mt-3 text-3xl font-bold text-[#F6F2F3]">
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-accent">Rent Sync</p>
+              <h1 className="mt-3 text-3xl font-bold text-ink">
                 {subscription?.status === 'suspended' ? 'Your subscription is suspended' : 'Activate your account'}
               </h1>
             </div>
             <button
               type="button"
               onClick={onSignOut}
-              className="no-scale rounded-lg border border-[#3A2F33] px-4 py-2 text-sm font-semibold text-[#C9C0C4] transition hover:border-[#C65A70] hover:text-white"
+              className="no-scale rounded-lg border border-[var(--border-control)] px-4 py-2 text-sm font-semibold text-muted transition hover:border-accent hover:text-ink"
             >
               Sign out
             </button>
           </div>
 
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[#C9C0C4]">
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted">
             {subscription?.status === 'suspended'
               ? 'Please get in touch and we will sort this out.'
               : 'Your account is set up and your data is safe. Add a property the moment your first payment is confirmed — everything unlocks automatically, no need to sign in again.'}
           </p>
 
-          {loadError && <p className="mt-6 rounded-xl bg-[#2A1418] p-4 text-sm text-[#F0A0A0]">{loadError}</p>}
+          {loadError && <p className="mt-6 rounded-xl bg-[var(--danger-soft)] p-4 text-sm text-[var(--danger-text)]">{loadError}</p>}
 
           {hasPending && (
-            <p className="mt-6 rounded-xl border border-[#3A2F33] bg-[#1C1618] p-4 text-sm text-[#C9C0C4]">
+            <p className="mt-6 rounded-xl border border-[var(--border-control)] bg-subtle p-4 text-sm text-muted">
               You have a payment waiting to be checked. We will switch your account on as soon as it
               matches our statement — there is nothing else to do.
             </p>
@@ -102,7 +102,7 @@ export default function Paywall({
 
           {/* 1. Choose a plan */}
           <section className="mt-8">
-            <h2 className="text-sm font-semibold uppercase tracking-widest text-[#8E8186]">1. Your plan</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-faint">1. Your plan</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {(state?.plans ?? [])
                 .filter((p) => p.amount !== null)
@@ -114,47 +114,47 @@ export default function Paywall({
                     aria-pressed={plan === p.key}
                     className={`no-scale rounded-xl border p-4 text-left transition ${
                       plan === p.key
-                        ? 'border-[#7A1428] bg-[#2A1418]'
-                        : 'border-[#3A2F33] bg-[#1C1618] hover:border-[#7A1428]'
+                        ? 'border-accent bg-[var(--accent-soft)]'
+                        : 'border-[var(--border-control)] bg-subtle hover:border-accent'
                     }`}
                   >
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="font-semibold text-[#F6F2F3]">{p.name}</span>
-                      <span className="font-semibold text-[#C65A70]">
+                      <span className="font-semibold text-ink">{p.name}</span>
+                      <span className="font-semibold text-accent">
                         KES {p.amount?.toLocaleString()}
-                        <span className="text-xs font-normal text-[#8E8186]">/mo</span>
+                        <span className="text-xs font-normal text-faint">/mo</span>
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-[#8E8186]">
+                    <p className="mt-1 text-xs text-faint">
                       {p.unitCeiling ? `Up to ${p.unitCeiling} units` : 'Unlimited units'}
                     </p>
                   </button>
                 ))}
             </div>
-            <p className="mt-3 text-xs text-[#8E8186]">
+            <p className="mt-3 text-xs text-faint">
               Running 100+ units, or fewer than 5? Message us and we will price it for you.
             </p>
           </section>
 
           {/* 2. Send the money */}
           <section className="mt-8">
-            <h2 className="text-sm font-semibold uppercase tracking-widest text-[#8E8186]">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-faint">
               2. Send {selected?.amount ? `KES ${selected.amount.toLocaleString()}` : 'the amount'} by M-Pesa
             </h2>
             {billing ? (
               <>
-                <div className="mt-3 rounded-xl border border-[#3A2F33] bg-[#1C1618] p-5">
-                  <p className="text-xs uppercase tracking-widest text-[#8E8186]">Send Money to</p>
-                  <p className="mt-1 text-2xl font-bold text-[#F6F2F3]">{billing.phoneDisplay}</p>
-                  <p className="mt-3 text-xs leading-relaxed text-[#8E8186]">
+                <div className="mt-3 rounded-xl border border-[var(--border-control)] bg-subtle p-5">
+                  <p className="text-xs uppercase tracking-widest text-faint">Send Money to</p>
+                  <p className="mt-1 text-2xl font-bold text-ink">{billing.phoneDisplay}</p>
+                  <p className="mt-3 text-xs leading-relaxed text-faint">
                     The name Safaricom shows you is the personal name on the receiving account, not a
                     company name. That is expected.
                   </p>
                 </div>
                 <ol className="mt-4 space-y-2">
                   {billing.instructions.map((step, i) => (
-                    <li key={step} className="flex gap-3 text-sm text-[#C9C0C4]">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7A1428] text-xs font-semibold text-white">
+                    <li key={step} className="flex gap-3 text-sm text-muted">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-button)] text-xs font-semibold text-[var(--color-button-text)]">
                         {i + 1}
                       </span>
                       <span className="pt-0.5">{step}</span>
@@ -163,23 +163,23 @@ export default function Paywall({
                 </ol>
               </>
             ) : (
-              <p className="mt-3 text-sm text-[#8E8186]">Loading payment details…</p>
+              <p className="mt-3 text-sm text-faint">Loading payment details…</p>
             )}
           </section>
 
           {/* 3. Hand over the code */}
           <section className="mt-8">
-            <h2 className="text-sm font-semibold uppercase tracking-widest text-[#8E8186]">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-faint">
               3. Send us the confirmation code
             </h2>
-            <p className="mt-2 text-sm leading-relaxed text-[#C9C0C4]">
+            <p className="mt-2 text-sm leading-relaxed text-muted">
               A Send Money transfer carries no reference we can read, so we cannot match it to your
               account on our own. Paste the confirmation code from your M-Pesa SMS and we will check
               it against our statement.
             </p>
 
             {sent ? (
-              <p className="mt-4 rounded-xl border border-[#2F5D3A] bg-[#14251A] p-4 text-sm text-[#9BD6AC]">
+              <p className="mt-4 rounded-xl border border border-[var(--success-text)]/50 bg-[var(--success-soft)] p-4 text-sm text-[var(--success-text)]">
                 Received — we are checking it now. This screen will let you in as soon as it matches.
               </p>
             ) : (
@@ -189,23 +189,23 @@ export default function Paywall({
                   onChange={(e) => setCode(e.target.value)}
                   placeholder="e.g. QJG7X2M4KL9RT"
                   aria-label="M-Pesa confirmation code"
-                  className="w-full rounded-xl border border-[#3A2F33] bg-[#1C1618] px-4 py-3 text-sm text-[#F6F2F3] placeholder:text-[#6E6367] focus:border-[#7A1428] focus:outline-none"
+                  className="w-full rounded-xl border border-[var(--border-control)] bg-subtle px-4 py-3 text-sm text-ink placeholder:text-[rgb(255_255_255/0.45)] focus:border-accent focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={submitting || code.trim().length < 8}
-                  className="no-scale w-full rounded-xl bg-[#7A1428] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#5C0F1F] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="no-scale w-full rounded-xl bg-[var(--color-button)] px-6 py-3 text-sm font-semibold text-[var(--color-button-text)] transition hover:bg-[var(--color-button-active)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {submitting ? 'Sending…' : 'I have paid — submit my code'}
                 </button>
-                {submitError && <p className="text-sm text-[#F0A0A0]">{submitError}</p>}
+                {submitError && <p className="text-sm text-[var(--error-text)]">{submitError}</p>}
               </form>
             )}
 
             <button
               type="button"
               onClick={onActivated}
-              className="no-scale mt-4 text-xs text-[#8E8186] underline underline-offset-4 hover:text-[#C9C0C4]"
+              className="no-scale mt-4 text-xs text-faint underline underline-offset-4 hover:text-muted"
             >
               Already activated? Check again
             </button>

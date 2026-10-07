@@ -22,10 +22,16 @@ import {
   type CollectionRateRow,
   type TenantStatement,
 } from './lib/api/reports';
-import { BulkTenantImport } from './components/BulkTenantImport';
-import SetupChecklist, { type SetupStep } from './components/SetupChecklist';
-import PropertyUnits from './components/PropertyUnits';
+import { type SetupStep } from './components/SetupChecklist';
 import Paywall from './components/Paywall';
+import {
+  DashboardContext,
+  readPageFromHash,
+  type DashboardValue,
+  type ModalId,
+  type PageId,
+} from './dashboard/context';
+import { AppShell } from './dashboard/shell';
 
 type Mode = 'login' | 'register';
 
@@ -55,6 +61,10 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  // True from the moment the app mounts until the first dashboard payload lands. `loading` only
+  // ever tracks form submissions, so without this the cards would have nothing to key a skeleton
+  // off and would flash empty states on every cold start.
+  const [dataLoading, setDataLoading] = useState(true);
   // Confirmation for a payment the landlord recorded by hand. Not an STK prompt notice - Rent Sync
   // does not prompt tenants.
   const [recordPaymentNotice, setRecordPaymentNotice] = useState('');
@@ -134,6 +144,20 @@ export default function App() {
   const [tenantRosterSearch, setTenantRosterSearch] = useState('');
   const [reportsLoading, setReportsLoading] = useState(false);
   const [reportsError, setReportsError] = useState('');
+
+  // Which page of the portal is showing, and which create-form drawer is open. Both live here (not
+  // in the shell) because the setup checklist and the Collect action navigate and open forms, and
+  // the create handlers close their drawer the moment the save succeeds.
+  const [page, setPage] = useState<PageId>(readPageFromHash);
+  const [modal, setModal] = useState<ModalId | null>(null);
+
+  // The active page is mirrored in the hash so refresh, bookmark and back/forward all work.
+  useEffect(() => {
+    const syncFromHash = () => setPage(readPageFromHash());
+    window.addEventListener('hashchange', syncFromHash);
+    if (!window.location.hash) window.location.replace('#/overview');
+    return () => window.removeEventListener('hashchange', syncFromHash);
+  }, []);
 
   const isLoggedIn = Boolean(localStorage.getItem('property_app_token'));
 
@@ -236,7 +260,7 @@ export default function App() {
           // The entitlement is passed in rather than read back off state: setEntitlement has not
           // flushed yet inside this callback, so reading it here would still see the previous value
           // and fire requests the plan does not allow.
-          loadProperties(false, state.entitlement);
+          loadProperties(false, state.entitlement).finally(() => setDataLoading(false));
           loadPaymentChannels();
           getArrears().then(setArrears).catch(() => setArrears([]));
           if (state.entitlement.features.includes('collectionRate')) {
@@ -250,6 +274,9 @@ export default function App() {
       .catch(() => {
         setSubscriptionStatus('active');
         setEntitlement(null);
+        // Billing is down, so no dashboard request fires here; the Refresh button is the way back.
+        // Stop the skeletons regardless, or every card spins forever on an outage.
+        setDataLoading(false);
       });
   }, [isLoggedIn]);
 
@@ -424,8 +451,14 @@ export default function App() {
     if (invoice) openRecordPayment(invoice, tenantId, outstandingFor(invoice));
   }
 
-  function scrollToSection(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Setup and Collect used to smooth-scroll to a section further down the same page. With one page
+  // at a time, the equivalent is switching to the page that holds the thing (and opening the form
+  // the landlord was being sent to) - the intent, "put them in front of it", is unchanged.
+  function goTo(pageId: PageId, open: ModalId | null = null) {
+    setPage(pageId);
+    setModal(open);
+    const hash = `#/${pageId}`;
+    if (window.location.hash !== hash) window.location.hash = hash;
   }
 
   // The one action behind the checklist's "Collect" step and the header's Collect button.
@@ -436,16 +469,16 @@ export default function App() {
       return;
     }
     // Nothing outstanding: point them at the place that would create something to collect.
-    scrollToSection('section-invoices');
+    goTo('invoices');
   }
 
   function handleSetupAction(step: SetupStep) {
     switch (step) {
       case 'property':
-        scrollToSection('section-add-property');
+        goTo('properties', 'add-property');
         break;
       case 'tenant':
-        scrollToSection('section-add-tenant');
+        goTo('tenants', 'add-tenant');
         break;
       case 'invoice':
         // Only offer the button when there is something to bill, otherwise generateMonthlyInvoices
@@ -453,17 +486,17 @@ export default function App() {
         if (tenants.some((tenant) => tenant.status === 'active')) {
           void handleGenerateInvoices();
         } else {
-          scrollToSection('section-add-tenant');
+          goTo('tenants', 'add-tenant');
         }
         break;
       case 'collect':
         startCollecting();
         break;
       case 'channel':
-        scrollToSection('section-channels');
+        goTo('channels', 'add-channel');
         break;
       default:
-        scrollToSection('section-channels');
+        goTo('channels', 'add-channel');
     }
   }
 
@@ -628,6 +661,7 @@ export default function App() {
 
       setPropertyForm({ name: '', address: '', units: '', rent_due_day: '5' });
       setPropertyErrors({});
+      setModal(null);
       await loadProperties();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Property creation failed');
@@ -749,6 +783,7 @@ export default function App() {
         description: paymentChannelForm.description.trim() || undefined,
       });
       setPaymentChannelForm({ channel_type: paymentChannelForm.channel_type, short_code: '', account_number: '', description: '' });
+      setModal(null);
       await loadPaymentChannels();
     } catch (err) {
       setPaymentChannelError(err instanceof Error ? err.message : 'Failed to register payment channel');
@@ -807,6 +842,7 @@ export default function App() {
       });
 
       setTenantForm({ property_id: '', name: '', phone: '', unit_number: '', monthly_rent: '0', status: 'active' });
+      setModal(null);
       await loadProperties();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Tenant creation failed');
@@ -851,6 +887,7 @@ export default function App() {
       });
 
       setMaintenanceForm({ property_id: '', tenant_id: '', title: '', description: '', priority: 'medium', status: 'open' });
+      setModal(null);
       await loadProperties();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Maintenance creation failed');
@@ -996,25 +1033,25 @@ export default function App() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-[#0D0A0B] px-4 py-12 text-[#F6F2F3]">
-        <div className="mx-auto max-w-md rounded-3xl border border-[#261F22] bg-[#161112] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+      <div className="min-h-screen bg-page px-4 py-12 text-ink">
+        <div className="mx-auto max-w-md rounded-3xl border border-line bg-card p-8 shadow-[var(--shadow-modal)]">
           <div className="mb-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#C65A70]">Rent Sync</p>
-            <h1 className="mt-3 text-3xl font-bold text-[#F6F2F3]">Property management</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-accent">Rent Sync</p>
+            <h1 className="mt-3 text-3xl font-bold text-ink">Property management</h1>
           </div>
 
-          <div className="mb-6 flex gap-2 rounded-xl bg-[#221C1E] p-1">
+          <div className="mb-6 flex gap-2 rounded-xl bg-subtle p-1">
             <button
               type="button"
               onClick={() => setMode('login')}
-              className={`no-scale flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${mode === 'login' ? 'bg-[#7A1428] text-white shadow-sm' : 'text-[#C9C0C4] hover:bg-[#221C1E]'}`}
+              className={`no-scale flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${mode === 'login' ? 'bg-[var(--color-button)] text-[var(--color-button-text)] shadow-sm' : 'text-muted hover:bg-hover'}`}
             >
               Login
             </button>
             <button
               type="button"
               onClick={() => setMode('register')}
-              className={`no-scale flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${mode === 'register' ? 'bg-[#7A1428] text-white shadow-sm' : 'text-[#C9C0C4] hover:bg-[#221C1E]'}`}
+              className={`no-scale flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${mode === 'register' ? 'bg-[var(--color-button)] text-[var(--color-button-text)] shadow-sm' : 'text-muted hover:bg-hover'}`}
             >
               Register
             </button>
@@ -1023,35 +1060,35 @@ export default function App() {
           <form className="space-y-4" onSubmit={handleAuthSubmit}>
             {mode === 'register' && (
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Full name</label>
+                <label className="mb-1 block text-sm font-medium text-muted">Full name</label>
                 <input
                   value={authForm.name}
                   onChange={(event) => setAuthForm({ ...authForm, name: event.target.value })}
-                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
+                  className="w-full rounded-lg border border-[var(--border-control)] bg-card px-3 py-2"
                   placeholder="Jane Landlord"
                 />
               </div>
             )}
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Email</label>
+              <label className="mb-1 block text-sm font-medium text-muted">Email</label>
               <input
                 type="email"
                 value={authForm.email}
                 onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
-                className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
+                className="w-full rounded-lg border border-[var(--border-control)] bg-card px-3 py-2"
                 placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Password</label>
+              <label className="mb-1 block text-sm font-medium text-muted">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={authForm.password}
                   onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
-                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 pr-11"
+                  className="w-full rounded-lg border border-[var(--border-control)] bg-card px-3 py-2 pr-11"
                   placeholder={showPassword ? 'Your password' : '••••••••'}
                   autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                 />
@@ -1061,7 +1098,7 @@ export default function App() {
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   aria-pressed={showPassword}
                   title={showPassword ? 'Hide password' : 'Show password'}
-                  className="no-scale absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-[#8A7F83] hover:text-[#C9C0C4] focus:outline-none focus-visible:text-[#C65A70]"
+                  className="no-scale absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-faint hover:text-muted focus:outline-none focus-visible:text-accent"
                 >
                   {showPassword ? (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden="true">
@@ -1082,34 +1119,34 @@ export default function App() {
 
             {mode === 'register' && (
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Role</label>
+                <label className="mb-1 block text-sm font-medium text-muted">Role</label>
                 <select
                   disabled
                   value="landlord"
-                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 opacity-70"
+                  className="w-full rounded-lg border border-[var(--border-control)] bg-card px-3 py-2 opacity-70"
                 >
                   <option value="landlord">Landlord</option>
                 </select>
-                <p className="mt-1 text-xs text-[#8A7F83]">New accounts are always registered as Landlord. Privileged roles are granted by an existing admin.</p>
+                <p className="mt-1 text-xs text-faint">New accounts are always registered as Landlord. Privileged roles are granted by an existing admin.</p>
               </div>
             )}
 
-            {error && <p className="text-sm text-[#F47C8E]">{error}</p>}
+            {error && <p className="text-sm text-[var(--kpi-red)]">{error}</p>}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-[#7A1428] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-xl bg-[var(--color-button)] px-4 py-3 font-semibold text-[var(--color-button-text)] shadow-[var(--shadow-md)] transition hover:bg-[var(--color-button-hover)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create account'}
             </button>
 
             {mode === 'login' && (
               <div className="pt-2">
-                <div className="mb-3 flex items-center gap-3 text-xs font-medium uppercase tracking-[0.2em] text-[#8A8085]">
-                  <span className="h-px flex-1 bg-[#2A2225]" />
+                <div className="mb-3 flex items-center gap-3 text-xs font-medium uppercase tracking-[0.2em] text-muted">
+                  <span className="h-px flex-1 bg-[var(--border)]" />
                   <span>or</span>
-                  <span className="h-px flex-1 bg-[#2A2225]" />
+                  <span className="h-px flex-1 bg-[var(--border)]" />
                 </div>
                 <div id="google-signin-wrap" className="relative h-11 w-full">
                   <div
@@ -1119,11 +1156,11 @@ export default function App() {
                   />
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none flex h-11 w-full items-center justify-center gap-3 rounded-xl bg-[#0B0B0C] text-sm font-semibold text-white"
+                    className="pointer-events-none flex h-11 w-full items-center justify-center gap-3 rounded-xl bg-[var(--color-button)] text-sm font-semibold text-[var(--color-button-text)]"
                   >
                     <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" focusable="false" aria-hidden="true">
                       <path
-                        fill="#FFFFFF"
+                        fill="currentColor"
                         d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.344-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"
                       />
                     </svg>
@@ -1323,1636 +1360,146 @@ export default function App() {
     : [];
   const selectedTenantSummary = selectedTenant ? getTenantRentStatus(selectedTenant) : null;
 
+  const dashboard: DashboardValue = {
+    user,
+    subscriptionStatus,
+    entitlement,
+
+    properties,
+    tenants,
+    invoices,
+    payments,
+    maintenance,
+    paymentChannels,
+    reconciliationAlerts,
+    reconciliationSummary,
+    arrears,
+    collectionRate,
+    tenantStatement,
+    setTenantStatement,
+
+    loading,
+    dataLoading,
+    refreshing,
+    lastUpdated,
+    error,
+    invoiceNotice,
+    generatingInvoices,
+    reportsLoading,
+    reportsError,
+
+    recordPaymentNotice,
+    recordError,
+    savingPayment,
+    recordingInvoiceId,
+    recordAmount,
+    recordMethod,
+    recordReference,
+    setRecordAmount,
+    setRecordMethod,
+    setRecordReference,
+
+    propertyForm,
+    setPropertyForm,
+    editPropertyForm,
+    setEditPropertyForm,
+    propertyErrors,
+    setPropertyErrors,
+    tenantForm,
+    setTenantForm,
+    maintenanceForm,
+    setMaintenanceForm,
+    paymentChannelForm,
+    setPaymentChannelForm,
+    manualPaymentForm,
+    setManualPaymentForm,
+    paymentChannelError,
+    paymentChannelLoading,
+
+    attentionFilter,
+    setAttentionFilter,
+    attentionSearch,
+    setAttentionSearch,
+    attentionPropertyFilter,
+    setAttentionPropertyFilter,
+    tenantRosterSearch,
+    setTenantRosterSearch,
+    reportPropertyFilter,
+    setReportPropertyFilter,
+    reportStatementTenantId,
+    setReportStatementTenantId,
+
+    selectedPropertyForUnits,
+    setSelectedPropertyForUnits,
+    selectedTenantId,
+    setSelectedTenantId,
+    editingPropertyId,
+    setEditingPropertyId,
+    deletingPropertyId,
+
+    activeTenants,
+    tenantRoster,
+    maintenanceActionQueue,
+    escalatedUrgent,
+    totalCollected,
+    totalOutstanding,
+    recentInvoices,
+    unmatchedPaymentCount,
+    propertySummaries,
+    propertyPaymentStatus,
+    attentionItems,
+    selectedTenant,
+    selectedTenantInvoices,
+    selectedTenantPayments,
+    selectedTenantSummary,
+
+    page,
+    goTo: (next) => goTo(next),
+    modal,
+    openModal: (next) => setModal(next),
+    closeModal: () => setModal(null),
+
+    can,
+    loadProperties,
+    startCollecting,
+    handleRefresh,
+    handleLogout,
+    handleSetupAction,
+    handleGenerateInvoices,
+    handleTenantsImported,
+
+    validatePropertyForm,
+    handlePropertySubmit,
+    handlePropertyUpdate,
+    handlePropertyEditStart,
+    handlePropertyDelete,
+    handleTenantSubmit,
+    handleTenantLifecycleAction,
+    handleMaintenanceSubmit,
+    handleMaintenanceStatusChange,
+    handleMaintenanceEscalate,
+    handleMaintenanceDelete,
+    handleManualPaymentReconciliation,
+    handlePaymentChannelSubmit,
+    handlePaymentChannelToggle,
+    handlePaymentChannelSync,
+    handlePaymentChannelDelete,
+    loadPaymentChannels,
+    loadReports,
+    handleTenantStatementLoad,
+
+    openRecordPayment,
+    closeRecordPayment,
+    handleSaveRecordedPayment,
+
+    downloadArrearsCsv,
+    downloadCollectionRateCsv,
+    downloadTenantStatementCsv,
+  };
+
   return (
-    <div className="min-h-screen bg-[#0D0A0B] px-4 py-8 text-[#F6F2F3]">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-8 flex flex-col gap-4 rounded-3xl border border-[#261F22] bg-[#161112] p-6 shadow-[0_18px_45px_rgba(0,0,0,0.5)] md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#C65A70]">Rent Sync</p>
-            <h1 className="mt-2 text-3xl font-bold text-[#F6F2F3]">Dashboard</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {lastUpdated && (
-              <span className="hidden text-xs text-[#A49DA1] sm:inline">
-                Updated {lastUpdated.toLocaleTimeString()}
-              </span>
-            )}
-            {/* Collect sits in the header because it is the thing a landlord opens the app to do.
-                The only path to it used to be Needs attention -> tenant -> invoice -> Record. */}
-            <button
-              type="button"
-              onClick={startCollecting}
-              className="rounded-xl bg-[#7A1428] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#8E1A30]"
-            >
-              Collect
-            </button>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="rounded-xl border border-[#33282C] bg-[#161112] px-4 py-2 text-sm font-medium text-[#CFC5CA] shadow-sm hover:border-[#7A3B4C] hover:text-[#C65A70] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {refreshing ? 'Refreshing…' : 'Refresh'}
-            </button>
-            <span className="rounded-full bg-[#2B1A1E] px-3 py-1 text-sm font-semibold text-[#C65A70] shadow-sm">
-              {user?.role || 'landlord'}
-            </span>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-xl border border-[#33282C] bg-[#161112] px-4 py-2 text-sm font-medium text-[#CFC5CA] shadow-sm hover:border-[#7A3B4C] hover:text-[#C65A70]"
-            >
-              Logout
-            </button>
-          </div>
-        </header>
-
-        <section className="mb-8 grid gap-4 md:grid-cols-4">
-          <div className="rounded-3xl border border-[#261F22] bg-[#161112] p-5 shadow-sm">
-            <p className="text-sm font-medium text-[#A99FA3]">Properties</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{properties.length}</p>
-          </div>
-          <div className="rounded-3xl border border-[#261F22] bg-[#201A1C] p-5 shadow-sm">
-            <p className="text-sm font-medium text-[#A99FA3]">Tenants</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{tenants.length}</p>
-          </div>
-          <div className="rounded-3xl border border-[#261F22] bg-[#201A1C] p-5 shadow-sm">
-            <p className="text-sm font-medium text-[#A99FA3]">Collected</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{kes(totalCollected)}</p>
-          </div>
-          <div className="rounded-3xl border border-[#261F22] bg-[#201A1C] p-5 shadow-sm">
-            <p className="text-sm font-medium text-[#A99FA3]">Outstanding</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{kes(totalOutstanding)}</p>
-          </div>
-        </section>
-
-        <SetupChecklist
-          state={{
-            hasProperty: properties.length > 0,
-            hasTenant: tenants.length > 0,
-            hasInvoice: invoices.length > 0,
-            hasCollected: payments.some((payment) => payment.status === 'completed'),
-            hasChannel: paymentChannels.length > 0,
-          }}
-          onAction={handleSetupAction}
-          actionContent={{
-            invoice: generatingInvoices ? 'Generating…' : undefined,
-          }}
-        />
-
-        {can('reconciliation') && (
-        <section className="mb-8 grid gap-4 md:grid-cols-4">
-          <div className="rounded-3xl border border-[#261F22] bg-[#161112] p-5 shadow-sm">
-            <p className="text-sm font-medium text-[#A99FA3]">Unmatched</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{reconciliationSummary.unmatched_count}</p>
-          </div>
-          <div className="rounded-3xl border border-[#261F22] bg-[#1C1618] p-5 shadow-sm">
-            <p className="text-sm font-medium text-[#A99FA3]">Duplicates</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{reconciliationSummary.duplicate_count}</p>
-          </div>
-          <div className="rounded-3xl border border-[#261F22] bg-[#161112] p-5 shadow-sm">
-            <p className="text-sm font-medium text-[#A99FA3]">Manual review</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{reconciliationSummary.manual_review_count}</p>
-          </div>
-          <div className="rounded-3xl border border-[#261F22] bg-[#201A1C] p-5 shadow-sm">
-            <p className="text-sm font-medium text-[#A99FA3]">Matched</p>
-            <p className="mt-3 text-3xl font-bold text-[#F6F2F3]">{reconciliationSummary.matched_count}</p>
-          </div>
-        </section>
-        )}
-
-        <section className="mb-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-[#F6F2F3]">Tenants</h2>
-            <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{tenants.length} total</span>
-          </div>
-
-          <input
-            value={tenantRosterSearch}
-            onChange={(event) => setTenantRosterSearch(event.target.value)}
-            placeholder="Search tenant, property, unit or phone..."
-            className="mb-4 w-full rounded-xl border border-[#261F22] bg-[#1C1618] px-3 py-2.5 text-sm text-[#C9C0C4] outline-none ring-0 sm:max-w-md"
-          />
-
-          {tenants.length === 0 ? (
-            <p className="text-[#A49DA1]">
-              No tenants yet. Add one by hand or bulk import a list - either way they land here with
-              their property, unit and monthly rent.
-            </p>
-          ) : tenantRoster.length === 0 ? (
-            <p className="text-[#A49DA1]">No tenant matches "{tenantRosterSearch.trim()}".</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="text-[#A99FA3]">
-                    <th className="px-3 py-2 font-medium">Tenant</th>
-                    <th className="px-3 py-2 font-medium">Property</th>
-                    <th className="px-3 py-2 font-medium">Unit</th>
-                    <th className="px-3 py-2 font-medium">Monthly rent</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tenantRoster.map((tenant) => (
-                    <tr
-                      key={tenant.id}
-                      onClick={() => setSelectedTenantId(tenant.id)}
-                      className="cursor-pointer border-t border-[#2A2225] transition hover:bg-[#1C1618]"
-                    >
-                      <td className="px-3 py-2">
-                        <span className="font-medium text-[#F6F2F3]">{tenant.name}</span>
-                        {tenant.phone && <span className="ml-2 text-xs text-[#A49DA1]">{tenant.phone}</span>}
-                      </td>
-                      <td className="px-3 py-2 text-[#D9D2D6]">{tenant.property_name ?? 'Unknown property'}</td>
-                      <td className="px-3 py-2 font-medium text-[#F6F2F3]">{tenant.unit_number}</td>
-                      <td className="px-3 py-2 text-[#D9D2D6]">{kes(tenant.monthly_rent)}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            tenant.status === 'active'
-                              ? 'bg-[#14211B] text-[#4ADE80]'
-                              : tenant.status === 'pending'
-                                ? 'bg-[#2B2116] text-[#F0B84B]'
-                                : tenant.status === 'moved_out'
-                                  ? 'bg-[#33161B] text-[#F08E9B]'
-                                  : 'bg-[#2B1A1E] text-[#C65A70]'
-                          }`}
-                        >
-                          {tenant.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold text-[#F6F2F3]">Collections by property</h2>
-              <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{properties.length} total</span>
-            </div>
-
-            {propertySummaries.length === 0 ? (
-              <p className="text-[#A49DA1]">No properties yet. Add one to get started.</p>
-            ) : (
-              <div className="space-y-4">
-                {propertySummaries.map(({ property, totalUnits, paidCount, partialCount, overdueCount, collectedAmount, outstandingAmount, collectionRate }) => (
-                  <div key={property.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-4 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-[#F6F2F3]">{property.name}</h3>
-                        <p className="text-sm text-[#A99FA3]">{property.address}</p>
-                      </div>
-                      <span className="rounded-full bg-[#14211B] px-2.5 py-1 text-xs font-semibold text-[#4ADE80]">
-                        {property.status}
-                      </span>
-                    </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-[#B0A8AD] md:grid-cols-4">
-                        <p>
-                          Units: {totalUnits}
-                          {entitlement?.unitsLimit != null && (
-                            <span className={entitlement.atUnitLimit ? 'text-[#F08E9B]' : 'text-[#6F656A]'}>
-                              {' '}of {entitlement.unitsLimit}
-                            </span>
-                          )}
-                        </p>
-                      <p>Paid: {paidCount}</p>
-                      <p>Partial: {partialCount}</p>
-                      <p>Overdue: {overdueCount}</p>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-xl bg-[#221C1E] p-3">
-                        <p className="text-[#A99FA3]">Collected</p>
-                        <p className="mt-1 font-semibold text-[#F6F2F3]">{kes(collectedAmount)}</p>
-                      </div>
-                      <div className="rounded-xl bg-[#201A1C] p-3">
-                        <p className="text-[#A99FA3]">Outstanding</p>
-                        <p className="mt-1 font-semibold text-[#F6F2F3]">{kes(outstandingAmount)}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="mb-1 flex items-center justify-between text-xs font-medium text-[#A49DA1]">
-                        <span>Collection rate</span>
-                        <span>{Math.round(collectionRate)}%</span>
-                      </div>
-                      <div className="h-2.5 overflow-hidden rounded-full bg-[#2A2124]">
-                        <div
-                          className="h-full rounded-full bg-[#7A1428]"
-                          style={{ width: `${Math.min(collectionRate, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPropertyForUnits(property.id)}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                          selectedPropertyForUnits === property.id
-                            ? 'border-[#7A3B4C] bg-[#2B1A1E] text-[#C65A70]'
-                            : 'border-[#33282C] bg-[#161112] text-[#CFC5CA] hover:border-[#7A3B4C] hover:text-[#C65A70]'
-                        }`}
-                      >
-                        Units
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePropertyEditStart(property)}
-                        className="rounded-full border border-[#33282C] bg-[#161112] px-3 py-1 text-xs font-medium text-[#CFC5CA] hover:border-[#7A3B4C] hover:text-[#C65A70]"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePropertyDelete(property.id)}
-                        disabled={deletingPropertyId != null}
-                        className="rounded-full border border-[#4A2127] bg-[#2E1519] px-3 py-1 text-xs font-medium text-[#F08E9B] hover:bg-[#3D1A1F] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {deletingPropertyId === property.id ? 'Deleting…' : 'Delete'}
-                      </button>
-                      <span className="ml-auto text-xs text-[#A49DA1]">Due: {property.rent_due_day ?? 5}th • {property.units} units</span>
-                    </div>
-
-                    {editingPropertyId === property.id && (
-                      <form onSubmit={handlePropertyUpdate} className="mt-4 space-y-3 rounded-xl border border-[#2C2326] bg-[#161112] p-4">
-                        <p className="text-sm font-semibold text-[#F6F2F3]">Edit property — independent (only this property changes)</p>
-                        <input
-                          value={editPropertyForm.name}
-                          onChange={(e) => setEditPropertyForm({ ...editPropertyForm, name: e.target.value })}
-                          placeholder="Property name"
-                          className={`w-full rounded-lg border px-3 py-2 text-sm ${propertyErrors.name ? 'border-[#5C2730]' : 'border-[#2A2225]'}`}
-                        />
-                        {propertyErrors.name && <p className="text-xs text-[#F47C8E]">{propertyErrors.name}</p>}
-                        <input
-                          value={editPropertyForm.address}
-                          onChange={(e) => setEditPropertyForm({ ...editPropertyForm, address: e.target.value })}
-                          placeholder="Address"
-                          className={`w-full rounded-lg border px-3 py-2 text-sm ${propertyErrors.address ? 'border-[#5C2730]' : 'border-[#2A2225]'}`}
-                        />
-                        {propertyErrors.address && <p className="text-xs text-[#F47C8E]">{propertyErrors.address}</p>}
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="number"
-                            min="1"
-                            value={editPropertyForm.units}
-                            onChange={(e) => setEditPropertyForm({ ...editPropertyForm, units: e.target.value })}
-                            className={`rounded-lg border px-3 py-2 text-sm ${propertyErrors.units ? 'border-[#5C2730]' : 'border-[#2A2225]'}`}
-                          />
-                          <select
-                            value={editPropertyForm.rent_due_day}
-                            onChange={(e) => setEditPropertyForm({ ...editPropertyForm, rent_due_day: e.target.value })}
-                            className="rounded-lg border border-[#2A2225] px-3 py-2 text-sm"
-                          >
-                            {Array.from({ length: 28 }, (_, i) => String(i + 1)).map((d) => (
-                              <option key={d} value={d}>{d}th</option>
-                            ))}
-                          </select>
-                        </div>
-                        {propertyErrors.units && <p className="text-xs text-[#F47C8E]">{propertyErrors.units}</p>}
-                        <div className="flex gap-2">
-                          <button type="submit" disabled={loading} className="no-scale flex-1 rounded-lg bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Save</button>
-                          <button type="button" onClick={() => { setEditingPropertyId(null); setPropertyErrors({}); }} className="no-scale flex-1 rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm">Cancel</button>
-                        </div>
-                      </form>
-                    )}
-                  </div>
-))}
-              </div>
-            )}
-          </section>
-
-          {/* Units section for selected property */}
-          {selectedPropertyForUnits && (
-            <PropertyUnits
-              key={selectedPropertyForUnits}
-              propertyId={selectedPropertyForUnits}
-              properties={properties}
-              tenants={tenants}
-              onUnitsChanged={() => { void loadProperties(true); }}
-            />
-          )}
-
-          <section className="rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-            <div className="mb-4 flex flex-col gap-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="text-xl font-semibold text-[#F6F2F3]">Needs attention</h2>
-                <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                  {(['all', 'overdue', 'partial', 'paid'] as const).map((filter) => (
-                    <button
-                      key={filter}
-                      type="button"
-                      onClick={() => setAttentionFilter(filter)}
-                      className={`rounded-full px-2.5 py-1.5 capitalize ${attentionFilter === filter ? 'bg-[#7A1428] text-white' : 'bg-[#2B1A1E] text-[#C65A70]'}`}
-                    >
-                      {filter}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-[1fr_220px]">
-                <input
-                  value={attentionSearch}
-                  onChange={(event) => setAttentionSearch(event.target.value)}
-                  placeholder="Search tenant, unit, or property"
-                  className="w-full rounded-xl border border-[#261F22] bg-[#1C1618] px-3 py-2.5 text-sm text-[#C9C0C4] outline-none ring-0"
-                />
-
-                <select
-                  value={attentionPropertyFilter}
-                  onChange={(event) => setAttentionPropertyFilter(event.target.value === 'all' ? 'all' : Number(event.target.value))}
-                  className="w-full rounded-xl border border-[#261F22] bg-[#1C1618] px-3 py-2.5 text-sm text-[#C9C0C4] outline-none ring-0"
-                >
-                  <option value="all">All properties</option>
-                  {properties.map((property) => (
-                    <option key={property.id} value={property.id}>{property.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {attentionItems.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1]">
-                  No tenants need attention right now.
-                </p>
-              ) : (
-                attentionItems.map((tenant) => (
-                  <button
-                    key={tenant.id}
-                    type="button"
-                    onClick={() => setSelectedTenantId(tenant.id)}
-                    className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#2C2326] bg-[#1C1618] p-4 text-left transition hover:border-[#7A3B4C] hover:bg-[#221C1E]"
-                  >
-                    <div>
-                      <p className="font-semibold text-[#F6F2F3]">{tenant.name}</p>
-                      <p className="text-sm text-[#A99FA3]">
-                        {tenant.propertyName} • Unit {tenant.unit_number}
-                      </p>
-                    </div>
-
-                    <div className="text-right">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tenant.status === 'overdue' ? 'bg-[#33161B] text-[#F08E9B]' : tenant.status === 'partial' ? 'bg-[#2B2116] text-[#F0B84B]' : 'bg-[#14211B] text-[#4ADE80]'}`}
-                      >
-                        {tenant.label}
-                      </span>
-                      <p className="mt-2 text-sm font-medium text-[#F6F2F3]">{kes(tenant.amountDue)}</p>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-[#F6F2F3]">Paid vs unpaid by property</h2>
-            <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{propertyPaymentStatus.length} properties</span>
-          </div>
-
-          <div className="space-y-4">
-            {propertyPaymentStatus.map(({ property, paidTenants, unpaidTenants, paymentChannels }) => (
-              <div key={property.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-4">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-[#F6F2F3]">{property.name}</h3>
-                    <p className="text-sm text-[#A99FA3]">{property.address}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    {paymentChannels.map((channel) => (
-                      <span key={channel} className="rounded-full bg-[#2B1A1E] px-2.5 py-1 font-medium text-[#C65A70]">{channel}</span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-xl bg-[#14211B] p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#4ADE80]">Paid</p>
-                    <p className="mt-2 text-lg font-bold text-[#F6F2F3]">{paidTenants.length} tenants</p>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-[#F6F2F3]">
-                      {paidTenants.length === 0 ? (
-                        <span className="text-[#A99FA3]">No tenant has paid yet</span>
-                      ) : (
-                        paidTenants.map((tenant) => <span key={tenant.id} className="rounded-full bg-[#161112] px-2 py-1">{tenant.name}</span>)
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl bg-[#201A1C] p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#D07387]">Not paid</p>
-                    <p className="mt-2 text-lg font-bold text-[#F6F2F3]">{unpaidTenants.length} tenants</p>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-[#F6F2F3]">
-                      {unpaidTenants.length === 0 ? (
-                        <span className="text-[#A99FA3]">All tenants are fully paid</span>
-                      ) : (
-                        unpaidTenants.map((tenant) => <span key={tenant.id} className="rounded-full bg-[#161112] px-2 py-1">{tenant.name}</span>)
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-    <div id="section-invoices" className="mt-8 scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold text-[#F6F2F3]">Recent invoices</h2>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleGenerateInvoices}
-                disabled={generatingInvoices || !user}
-                className="rounded-full bg-[#7A1428] px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {generatingInvoices ? 'Generating…' : 'Generate next month'}
-              </button>
-              <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{recentInvoices.length} latest</span>
-            </div>
-          </div>
-          {invoiceNotice && <p className="mb-3 text-sm font-medium text-[#C65A70]">{invoiceNotice}</p>}
-          <div className="mt-4 space-y-3 sm:hidden">
-            {recentInvoices.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1]">
-                No invoices yet
-              </p>
-            ) : (
-              recentInvoices.map((invoice) => (
-                <div key={invoice.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-semibold text-[#F6F2F3]">{invoice.invoice_number}</p>
-                    <span className="shrink-0 rounded-full bg-[#2B2116] px-2.5 py-1 text-xs font-semibold text-[#F0B84B]">
-                      {invoice.status}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-[#A99FA3]">{invoice.tenant_name || '—'}</p>
-                  <p className="mt-1 text-sm font-medium text-[#D9D2D6]">{kes(invoice.amount)}</p>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-[#2C2326] sm:block">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-[#221C1E] text-[#B5ABB0]">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Invoice</th>
-                  <th className="px-3 py-2 font-medium">Tenant</th>
-                  <th className="px-3 py-2 font-medium">Amount</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentInvoices.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-3 py-4 text-[#A49DA1]">No invoices yet</td>
-                  </tr>
-                ) : (
-                  recentInvoices.map((invoice) => (
-                    <tr key={invoice.id} className="border-t border-[#2A2225]">
-                      <td className="px-3 py-2">{invoice.invoice_number}</td>
-                      <td className="px-3 py-2">{invoice.tenant_name || '—'}</td>
-                      <td className="px-3 py-2">{kes(invoice.amount)}</td>
-                      <td className="px-3 py-2">
-                        <span className="rounded-full bg-[#2B2116] px-2.5 py-1 text-xs font-semibold text-[#F0B84B]">{invoice.status}</span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold text-[#F6F2F3]">Payments received</h2>
-              <p className="mt-1 text-xs text-[#A49DA1]">
-                Every payment recorded against your properties, newest first. Payments that could not be
-                matched to an invoice are listed here too and flagged for reconciliation — nothing received
-                is ever hidden.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {unmatchedPaymentCount > 0 && (
-                <span className="rounded-full bg-[#3A1414] px-2.5 py-1 text-xs font-semibold text-[#F08A8A]">
-                  {unmatchedPaymentCount} needing reconciliation
-                </span>
-              )}
-              <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">
-                {payments.length} total
-              </span>
-            </div>
-          </div>
-          {payments.length > 0 && (
-            <div className="mt-4 space-y-3 sm:hidden">
-              {payments.map((payment) => (
-                <div key={payment.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-semibold text-[#F6F2F3]">{kes(payment.amount)}</p>
-                    {payment.matched === false ? (
-                      <span className="shrink-0 rounded-full bg-[#3A1414] px-2.5 py-1 text-xs font-semibold text-[#F08A8A]">
-                        Needs reconciliation
-                      </span>
-                    ) : (
-                      <span className="shrink-0 rounded-full bg-[#152A1C] px-2.5 py-1 text-xs font-semibold text-[#6FCF97]">
-                        {payment.status}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm text-[#A99FA3]">
-                    {payment.tenant_name || 'Unidentified tenant'}
-                    {' · '}
-                    {payment.invoice_number || 'Not matched'}
-                  </p>
-                  <p className="mt-1 text-xs text-[#8A8085]">{new Date(payment.paid_at).toLocaleString()}</p>
-                  <dl className="mt-3 space-y-1 text-sm">
-                    <div className="flex justify-between gap-3">
-                      <dt className="text-[#A99FA3]">Method</dt>
-                      <dd className="text-right capitalize text-[#D9D2D6]">
-                        {String(payment.payment_method).replace(/_/g, ' ')}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <dt className="text-[#A99FA3]">Channel</dt>
-                      <dd className="text-right text-[#D9D2D6]">
-                        {payment.channel_short_code || '—'}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <dt className="text-[#A99FA3]">Reference</dt>
-                      <dd className="truncate text-right text-[#D9D2D6]">
-                        {payment.reference || payment.transaction_ref || '—'}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {payments.length === 0 && (
-            <p className="mt-4 rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1] sm:hidden">
-                    No payments recorded yet. They appear here the moment a tenant pays through your
-                    registered PayHero channel, or when you record one you already received.
-            </p>
-          )}
-
-          <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-[#2C2326] sm:block">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-[#221C1E] text-[#B5ABB0]">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Received</th>
-                  <th className="px-3 py-2 font-medium">Tenant</th>
-                  <th className="px-3 py-2 font-medium">Invoice</th>
-                  <th className="px-3 py-2 font-medium">Amount</th>
-                  <th className="px-3 py-2 font-medium">Method</th>
-                  <th className="px-3 py-2 font-medium">Channel</th>
-                  <th className="px-3 py-2 font-medium">Reference</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-3 py-4 text-[#A49DA1]">
-                  No payments recorded yet. They appear here the moment a tenant pays through your
-                  registered PayHero channel, or when you record one you already received.
-                    </td>
-                  </tr>
-                ) : (
-                  payments.map((payment) => (
-                    <tr key={payment.id} className="border-t border-[#2A2225]">
-                      <td className="whitespace-nowrap px-3 py-2 text-[#D9D2D6]">
-                        {new Date(payment.paid_at).toLocaleString()}
-                      </td>
-                      <td className="px-3 py-2">{payment.tenant_name || <span className="text-[#A49DA1]">Unidentified</span>}</td>
-                      <td className="px-3 py-2">
-                        {payment.invoice_number || <span className="text-[#A49DA1]">Not matched</span>}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 font-medium text-[#F6F2F3]">
-                        {kes(payment.amount)}
-                      </td>
-                      <td className="px-3 py-2 capitalize text-[#D9D2D6]">
-                        {String(payment.payment_method).replace(/_/g, ' ')}
-                      </td>
-                      <td className="px-3 py-2 text-[#D9D2D6]">
-                        {payment.channel_short_code || <span className="text-[#A49DA1]">—</span>}
-                      </td>
-                      <td className="px-3 py-2 text-[#D9D2D6]">
-                        {payment.reference || payment.transaction_ref || <span className="text-[#A49DA1]">—</span>}
-                      </td>
-                      <td className="px-3 py-2">
-                        {payment.matched === false ? (
-                          <span className="rounded-full bg-[#3A1414] px-2.5 py-1 text-xs font-semibold text-[#F08A8A]">
-                            Needs reconciliation
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-[#152A1C] px-2.5 py-1 text-xs font-semibold text-[#6FCF97]">
-                            {payment.status}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {can('reconciliation') && (
-        <div className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-[#F6F2F3]">Payment alerts</h2>
-            <span className="rounded-full bg-[#2B1A1E] px-2.5 py-1 text-xs font-semibold text-[#C65A70]">{reconciliationAlerts.length} entries</span>
-          </div>
-          <div className="space-y-3">
-            {reconciliationAlerts.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1]">No reconciliation alerts.</p>
-            ) : (
-              reconciliationAlerts.slice(0, 6).map((alert) => (
-                <div key={alert.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="font-semibold text-[#F6F2F3]">{alert.tenant_name || alert.invoice_number || 'Unknown tenant'}</p>
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ${alert.match_status === 'unmatched' ? 'bg-[#33161B] text-[#F08E9B]' : alert.match_status === 'duplicate' || alert.match_status === 'manual_review' ? 'bg-[#2B2116] text-[#F0B84B]' : 'bg-[#14211B] text-[#4ADE80]'}`}>
-                      {alert.match_status}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-[#A99FA3]">
-                    {alert.property_name ? `${alert.property_name} • ` : ''}
-                    {alert.invoice_number ? `Invoice ${alert.invoice_number} • ` : ''}
-                    {alert.transaction_ref || 'No reference'}
-                  </p>
-                  <p className="mt-1 text-xs text-[#B5ABB0]">{new Date(alert.created_at).toLocaleString()}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {can('reconciliation') && (
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <h2 className="text-xl font-semibold text-[#F6F2F3]">Manual payment reconciliation</h2>
-          <p className="mt-2 text-sm text-[#A99FA3]">Use this when a tenant pays by bank transfer or an unmatched mobile-money reference needs to be linked to the correct tenant.</p>
-          <form className="mt-4 space-y-4" onSubmit={handleManualPaymentReconciliation}>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Property</label>
-              <select
-                value={manualPaymentForm.property_id}
-                onChange={(event) => setManualPaymentForm({ ...manualPaymentForm, property_id: event.target.value })}
-                className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
-              >
-                <option value="">Select property</option>
-                {properties.map((property) => (
-                  <option key={property.id} value={property.id}>{property.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Tenant name</label>
-                <input
-                  value={manualPaymentForm.tenant_name}
-                  onChange={(event) => setManualPaymentForm({ ...manualPaymentForm, tenant_name: event.target.value })}
-                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
-                  placeholder="Jane Mwangi"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Amount</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={manualPaymentForm.amount}
-                  onChange={(event) => setManualPaymentForm({ ...manualPaymentForm, amount: event.target.value })}
-                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Payment method</label>
-                <select
-                  value={manualPaymentForm.payment_method}
-                  onChange={(event) => setManualPaymentForm({ ...manualPaymentForm, payment_method: event.target.value as 'bank_transfer' | 'mobile_money' | 'cash' | 'card' | 'other' })}
-                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
-                >
-                  <option value="mobile_money">Mobile money</option>
-                  <option value="bank_transfer">Bank transfer</option>
-                  <option value="cash">Cash</option>
-                  <option value="card">Card</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Transaction reference</label>
-                <input
-                  value={manualPaymentForm.transaction_ref}
-                  onChange={(event) => setManualPaymentForm({ ...manualPaymentForm, transaction_ref: event.target.value })}
-                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
-                  placeholder="MPESA-12345 or bank transfer ref"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Reference note</label>
-              <input
-                value={manualPaymentForm.reference}
-                onChange={(event) => setManualPaymentForm({ ...manualPaymentForm, reference: event.target.value })}
-                className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
-                placeholder="Jane Mwangi"
-              />
-            </div>
-
-            {error && <p className="text-sm text-[#F47C8E]">{error}</p>}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-xl bg-[#7A1428] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? 'Reconciling payment...' : 'Match payment to tenant'}
-              </button>
-            </form>
-          </section>
-        )}
-
-      <section id="section-add-property" className="mt-8 scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-      <h2 className="text-xl font-semibold text-[#F6F2F3]">Add property</h2>
-          <form className="mt-4 space-y-4" onSubmit={handlePropertySubmit}>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Property name</label>
-              <input
-                value={propertyForm.name}
-                onChange={(event) => setPropertyForm({ ...propertyForm, name: event.target.value })}
-                className={`w-full rounded-lg border bg-[#161112] px-3 py-2 ${propertyErrors.name ? 'border-[#5C2730]' : 'border-[#2A2225]'}`}
-                placeholder="Sunset Apartments"
-                aria-invalid={!!propertyErrors.name}
-              />
-              {propertyErrors.name && <p className="mt-1 text-xs text-[#F47C8E]">{propertyErrors.name}</p>}
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Address</label>
-              <input
-                value={propertyForm.address}
-                onChange={(event) => setPropertyForm({ ...propertyForm, address: event.target.value })}
-                className={`w-full rounded-lg border bg-[#161112] px-3 py-2 ${propertyErrors.address ? 'border-[#5C2730]' : 'border-[#2A2225]'}`}
-                placeholder="12 River Road"
-                aria-invalid={!!propertyErrors.address}
-              />
-              {propertyErrors.address && <p className="mt-1 text-xs text-[#F47C8E]">{propertyErrors.address}</p>}
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Units</label>
-              <input
-                type="number"
-                min="1"
-                placeholder="e.g. 72"
-                value={propertyForm.units}
-                onChange={(event) => setPropertyForm({ ...propertyForm, units: event.target.value })}
-                className={`w-full rounded-lg border bg-[#161112] px-3 py-2 ${propertyErrors.units ? 'border-[#5C2730]' : 'border-[#2A2225]'}`}
-                aria-invalid={!!propertyErrors.units}
-              />
-              {propertyErrors.units && <p className="mt-1 text-xs text-[#F47C8E]">{propertyErrors.units}</p>}
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Rent due day (landlord dictates)</label>
-              <select
-                value={propertyForm.rent_due_day}
-                onChange={(event) => setPropertyForm({ ...propertyForm, rent_due_day: event.target.value })}
-                className={`w-full rounded-lg border bg-[#161112] px-3 py-2 ${propertyErrors.rent_due_day ? 'border-[#5C2730]' : 'border-[#2A2225]'}`}
-                aria-invalid={!!propertyErrors.rent_due_day}
-              >
-                {Array.from({ length: 28 }, (_, i) => String(i + 1)).map((d) => (
-                  <option key={d} value={d}>{d}th of each month</option>
-                ))}
-              </select>
-              {propertyErrors.rent_due_day && <p className="mt-1 text-xs text-[#F47C8E]">{propertyErrors.rent_due_day}</p>}
-              <p className="mt-1 text-xs text-[#A49DA1]">Invoices are dated to this day, so you can start collecting from the 1st. Use Generate invoices on the dashboard to create them.</p>
-            </div>
-
-            {error && <p className="text-sm text-[#F47C8E]">{error}</p>}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-xl bg-[#7A1428] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? 'Saving...' : 'Save property'}
-            </button>
-          </form>
-        </section>
-
-    <div className="mt-8 grid gap-6 xl:grid-cols-2">
-      <section id="section-channels" className="scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-[#F6F2F3]">Payment Channels (PayHero)</h2>
-              <button type="button" onClick={loadPaymentChannels} className="rounded-full bg-[#2B1A1E] px-3 py-1.5 text-xs font-semibold text-[#C65A70]">Refresh</button>
-            </div>
-
-            <form className="mt-4 grid grid-cols-2 gap-3" onSubmit={handlePaymentChannelSubmit}>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Channel type</label>
-                <select value={paymentChannelForm.channel_type} onChange={(event) => setPaymentChannelForm({ ...paymentChannelForm, channel_type: event.target.value as 'paybill' | 'till' | 'bank' })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2">
-                  <option value="paybill">Paybill</option>
-                  <option value="till">Till</option>
-                  <option value="bank">Bank</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Short code / Paybill / Till / Bank number</label>
-                <input value={paymentChannelForm.short_code} onChange={(event) => setPaymentChannelForm({ ...paymentChannelForm, short_code: event.target.value })} placeholder="e.g. 522522" className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Account number (bank / paybill account — optional)</label>
-                <input value={paymentChannelForm.account_number} onChange={(event) => setPaymentChannelForm({ ...paymentChannelForm, account_number: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Description</label>
-                <input value={paymentChannelForm.description} onChange={(event) => setPaymentChannelForm({ ...paymentChannelForm, description: event.target.value })} placeholder="e.g. Main Paybill" className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
-              </div>
-              <div className="col-span-2">
-                <button type="submit" disabled={paymentChannelLoading || !paymentChannelForm.short_code.trim()} className="w-full rounded-xl bg-[#7A1428] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] disabled:cursor-not-allowed disabled:opacity-60">
-                  {paymentChannelLoading ? 'Registering with PayHero...' : 'Add payment channel'}
-                </button>
-              </div>
-            </form>
-
-            {/* Sits between the form and the channel list rather than inside the submit block: a
-                refused delete names the row the landlord just tried to remove, and that row is
-                below. */}
-            {paymentChannelError && <p className="mt-3 text-xs text-[#F47C8E]">{paymentChannelError}</p>}
-
-            {paymentChannels.length === 0 ? (
-              <p className="mt-4 text-sm text-[#A49DA1]">No payment channels yet. Add a Paybill, Till, or Bank channel above — PayHero requires an ownership-confirmation step before incoming payments activate.</p>
-            ) : (
-              <ul className="mt-4 space-y-2">
-                {paymentChannels.map((channel) => (
-                  <li key={channel.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#2A2225] px-4 py-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-[#F6F2F3]">{channel.description || channel.short_code}</span>
-                        <span className="rounded-full bg-[#2B1A1E] px-2 py-0.5 text-xs font-semibold text-[#C65A70] uppercase">{channel.channel_type}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${channel.verification_status === 'active' ? 'bg-green-100 text-green-800' : 'bg-[#2B2116] text-[#F2C060]'}`}>{channel.verification_status}</span>
-                        {!channel.is_active && <span className="rounded-full bg-[#2A2225] px-2 py-0.5 text-xs font-semibold text-[#B0A8AD]">deactivated</span>}
-                      </div>
-                      <p className="mt-1 truncate text-xs text-[#A49DA1]">
-                        Short code: {channel.short_code}
-                        {channel.payhero_channel_id ? ` · PayHero channel id: ${channel.payhero_channel_id}` : ' · not yet confirmed by PayHero'}
-                        {channel.account_number ? ` · Acct: ${channel.account_number}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => handlePaymentChannelSync(channel.id)} className="rounded-full border border-[#2C2326] px-3 py-1 text-xs font-semibold text-[#D07387]">Sync status</button>
-                      <button
-                        type="button"
-                        onClick={() => handlePaymentChannelToggle(channel)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${channel.is_active ? 'bg-[#7A1428] text-white' : 'bg-[#2B1A1E] text-[#C65A70]'}`}
-                      >
-                        {channel.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePaymentChannelDelete(channel)}
-                        className="rounded-full border border-[#4A2127] bg-[#2E1519] px-3 py-1 text-xs font-semibold text-[#F08E9B] hover:border-[#7A3B4C]"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-    <section id="section-add-tenant" className="scroll-mt-4 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-      <h2 className="text-xl font-semibold text-[#F6F2F3]">Add tenant</h2>
-            <form className="mt-4 space-y-4" onSubmit={handleTenantSubmit}>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Property</label>
-                <select
-                  value={tenantForm.property_id}
-                  onChange={(event) => setTenantForm({ ...tenantForm, property_id: event.target.value })}
-                  className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2"
-                >
-                  <option value="">Select property</option>
-                  {properties.map((property) => (
-                    <option key={property.id} value={property.id}>{property.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Name</label>
-                <input value={tenantForm.name} onChange={(event) => setTenantForm({ ...tenantForm, name: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Phone</label>
-                <input value={tenantForm.phone} onChange={(event) => setTenantForm({ ...tenantForm, phone: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Unit</label>
-                  <input value={tenantForm.unit_number} onChange={(event) => setTenantForm({ ...tenantForm, unit_number: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Rent</label>
-                  <input type="number" value={tenantForm.monthly_rent} onChange={(event) => setTenantForm({ ...tenantForm, monthly_rent: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
-                </div>
-              </div>
-
-              <button type="submit" disabled={loading} className="w-full rounded-xl bg-[#8E1A30] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] disabled:cursor-not-allowed disabled:opacity-60">{loading ? 'Saving...' : 'Add tenant'}</button>
-            </form>
-          </section>
-
-        </div>
-
-        {can('bulkImport') && (
-        <div className="mt-8">
-          <BulkTenantImport properties={properties} tenants={tenants} onImported={handleTenantsImported} />
-        </div>
-        )}
-
-        {selectedTenant && selectedTenantSummary && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
-            <div className="max-h-[85vh] w-full max-w-3xl overflow-auto rounded-3xl border border-[#261F22] bg-[#161112] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.7)]">
-              <div className="mb-5 flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#C65A70]">Tenant details</p>
-                  <h3 className="mt-2 text-2xl font-bold text-[#F6F2F3]">{selectedTenant.name}</h3>
-                  <p className="text-sm text-[#A99FA3]">
-                    {properties.find((property) => property.id === selectedTenant.property_id)?.name ?? 'Unknown property'} • Unit {selectedTenant.unit_number}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedTenantId(null)}
-                  className="rounded-full border border-[#33282C] bg-[#201A1C] px-3 py-1.5 text-sm font-medium text-[#CFC5CA]"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="mb-6 grid gap-3 md:grid-cols-3">
-                <div className="rounded-2xl bg-[#221C1E] p-4">
-                  <p className="text-xs uppercase tracking-[0.15em] text-[#B5ABB0]">Status</p>
-                  <p className="mt-2 text-lg font-semibold text-[#F6F2F3]">{selectedTenantSummary.label}</p>
-                </div>
-                <div className="rounded-2xl bg-[#221C1E] p-4">
-                  <p className="text-xs uppercase tracking-[0.15em] text-[#B5ABB0]">Total due</p>
-                  <p className="mt-2 text-lg font-semibold text-[#F6F2F3]">{kes(selectedTenantSummary.amountDue)}</p>
-                </div>
-                <div className="rounded-2xl bg-[#221C1E] p-4">
-                  <p className="text-xs uppercase tracking-[0.15em] text-[#B5ABB0]">Monthly rent</p>
-                  <p className="mt-2 text-lg font-semibold text-[#F6F2F3]">{kes(selectedTenant.monthly_rent)}</p>
-                </div>
-              </div>
-
-              <div className="mb-6 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleTenantLifecycleAction(selectedTenant.id, 'moved_out')}
-                  disabled={loading}
-                  className="rounded-xl border border-[#4A3339] bg-[#1C1618] px-3 py-2 text-sm font-medium text-[#C65A70] disabled:opacity-60"
-                >
-                  Mark moved out
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTenantLifecycleAction(selectedTenant.id, 'archived')}
-                  disabled={loading}
-                  className="rounded-xl border border-[#4A3339] bg-[#161112] px-3 py-2 text-sm font-medium text-[#CFC5CA] disabled:opacity-60"
-                >
-                  Archive tenant
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTenantLifecycleAction(selectedTenant.id, 'delete')}
-                  disabled={loading}
-                  className="rounded-xl border border-[#4A2127] bg-[#2E1519] px-3 py-2 text-sm font-medium text-[#F08E9B] disabled:opacity-60"
-                >
-                  Delete tenant
-                </button>
-              </div>
-
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div>
-                  <h4 className="mb-3 text-lg font-semibold text-[#F6F2F3]">Invoices</h4>
-                  <div className="space-y-3">
-                    {selectedTenantInvoices.length === 0 ? (
-                      <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-3 text-sm text-[#A49DA1]">No invoices yet.</p>
-                    ) : (
-                      selectedTenantInvoices.map((invoice) => {
-                        const invoicePayments = payments.filter((payment) => payment.invoice_id === invoice.id);
-                        const invoicePaid = invoicePayments
-                          .filter((payment) => payment.status === 'completed')
-                          .reduce((sum, payment) => sum + Number(payment.amount), 0);
-
-                        return (
-                          <div key={invoice.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <p className="font-semibold text-[#F6F2F3]">{invoice.invoice_number}</p>
-                              <span className="rounded-full bg-[#2B1A1E] px-2 py-1 text-[11px] font-semibold text-[#C65A70] uppercase">
-                                {invoice.status}
-                              </span>
-                            </div>
-                              <p className="mt-2 text-sm text-[#A99FA3]">Due: {invoice.due_date}</p>
-                              <p className="text-sm text-[#A99FA3]">Amount: {kes(invoice.amount)}</p>
-                              <p className="text-sm text-[#A99FA3]">Paid: {kes(invoicePaid)}</p>
-                              {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
-                                <>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (recordingInvoiceId === invoice.id) {
-                                      closeRecordPayment();
-                                      return;
-                                    }
-                                    openRecordPayment(invoice, selectedTenant.id, Number(invoice.amount) - invoicePaid);
-                                  }}
-                                  disabled={savingPayment}
-                                  aria-expanded={recordingInvoiceId === invoice.id}
-                                  className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                                    recordingInvoiceId === invoice.id
-                                      ? 'border-[#7A3B4C] bg-[#2B1A1E] text-[#E8B4BF]'
-                                      : 'border-[#4A3339] bg-[#161112] text-[#CFC5CA] hover:border-[#7A3B4C]'
-                                  }`}
-                                >
-                                  {recordingInvoiceId === invoice.id
-                                    ? 'Cancel recording'
-                                    : 'I already received this payment'}
-                                </button>
-
-                                {recordingInvoiceId === invoice.id && (
-                                  <form
-                                    onSubmit={(event) => handleSaveRecordedPayment(event, invoice)}
-                                    className="mt-3 space-y-3 rounded-xl border border-[#3A2E32] bg-[#1C1618] p-3"
-                                  >
-                                    <p className="text-xs text-[#A99FA3]">
-                                      For money that reached you outside a registered channel — M-Pesa Send
-                                      Money to your number, cash, or a bank transfer. There is no automatic
-                                      confirmation for these, so record it here.
-                                    </p>
-
-                                    <div>
-                                      <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-amount-${invoice.id}`}>
-                                        Amount received (KES)
-                                      </label>
-                                      <input
-                                        id={`record-amount-${invoice.id}`}
-                                        type="number"
-                                        inputMode="decimal"
-                                        step="0.01"
-                                        min="0"
-                                        value={recordAmount}
-                                        onChange={(event) => setRecordAmount(event.target.value)}
-                                        className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
-                                      />
-                                    </div>
-
-                                    <div>
-                                      <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-method-${invoice.id}`}>
-                                        How did it arrive?
-                                      </label>
-                                      <select
-                                        id={`record-method-${invoice.id}`}
-                                        value={recordMethod}
-                                        onChange={(event) =>
-                                          setRecordMethod(event.target.value as typeof recordMethod)
-                                        }
-                                        className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
-                                      >
-                                        <option value="mobile_money">M-Pesa Send Money</option>
-                                        <option value="bank_transfer">Bank transfer</option>
-                                        <option value="cash">Cash</option>
-                                        <option value="card">Card</option>
-                                        <option value="other">Other</option>
-                                      </select>
-                                    </div>
-
-                                    <div>
-                                      <label className="mb-1 block text-xs font-medium text-[#C9C0C4]" htmlFor={`record-ref-${invoice.id}`}>
-                                        Reference (optional)
-                                      </label>
-                                      <input
-                                        id={`record-ref-${invoice.id}`}
-                                        type="text"
-                                        value={recordReference}
-                                        onChange={(event) => setRecordReference(event.target.value)}
-                                        placeholder="e.g. QJG7X4K2PL"
-                                        className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2 text-sm"
-                                      />
-                                    </div>
-
-                                    {recordError && (
-                                      <p className="rounded-lg border border-[#4A2127] bg-[#2E1519] p-2 text-xs text-[#F0A0AB]">
-                                        {recordError}
-                                      </p>
-                                    )}
-
-                                    <div className="flex gap-2">
-                                      <button
-                                        type="submit"
-                                        disabled={savingPayment}
-                                        className="flex-1 rounded-lg bg-[#7A1428] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#8E1A30] disabled:cursor-not-allowed disabled:opacity-50"
-                                      >
-                                        {savingPayment ? 'Saving…' : 'Save payment'}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={closeRecordPayment}
-                                        disabled={savingPayment}
-                                        className="rounded-lg border border-[#4A3339] bg-[#161112] px-3 py-2 text-sm font-medium text-[#CFC5CA] disabled:opacity-50"
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </form>
-                                )}
-                                </>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                    {recordPaymentNotice && (
-                      <p className="mt-3 rounded-2xl border border-[#3A2E32] bg-[#1C1618] p-3 text-sm text-[#CFC5CA]">
-                        {recordPaymentNotice}
-                      </p>
-                    )}
-                  </div>
-
-                <div>
-                  <h4 className="mb-3 text-lg font-semibold text-[#F6F2F3]">Payment history</h4>
-                  <div className="space-y-3">
-                    {selectedTenantPayments.length === 0 ? (
-                      <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-3 text-sm text-[#A49DA1]">No payments recorded.</p>
-                    ) : (
-                      selectedTenantPayments.map((payment) => (
-                        <div key={payment.id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <p className="font-semibold text-[#F6F2F3]">{kes(payment.amount)}</p>
-                            <span className="rounded-full bg-[#14211B] px-2 py-1 text-[11px] font-semibold text-[#4ADE80] uppercase">
-                              {payment.status}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-sm text-[#A99FA3]">Method: {payment.payment_method}</p>
-                          <p className="text-sm text-[#A99FA3]">Reference: {payment.reference || '—'}</p>
-                          <p className="text-sm text-[#A99FA3]">Paid: {payment.paid_at ? new Date(payment.paid_at).toLocaleString() : '—'}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-[#F6F2F3]">Reports</h2>
-              <p className="mt-1 text-sm text-[#A99FA3]">
-                Arrears by property
-                {can('collectionRate') ? ', monthly collection rate' : ''}
-                {can('tenantStatements') ? ', and per-tenant statements' : ''}
-                {can('csvExport') ? ' — exportable as CSV' : ''}.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={reportPropertyFilter}
-                onChange={(event) => {
-                  const next = event.target.value === 'all' ? 'all' : Number(event.target.value);
-                  setReportPropertyFilter(next);
-                  setReportsError('');
-                  getArrears(next === 'all' ? undefined : next)
-                    .then(setArrears)
-                    .catch((err: unknown) => setReportsError(err instanceof Error ? err.message : 'Failed to load arrears'));
-                }}
-                className="rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-1.5 text-sm"
-              >
-                <option value="all">All properties</option>
-                {properties.map((property) => (
-                  <option key={property.id} value={property.id}>{property.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={loadReports}
-                disabled={reportsLoading}
-                className="rounded-full bg-[#2B1A1E] px-3 py-1.5 text-xs font-semibold text-[#C65A70] disabled:opacity-60"
-              >
-                {reportsLoading ? 'Loading…' : 'Refresh'}
-              </button>
-              {can('csvExport') && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => downloadArrearsCsv(reportPropertyFilter === 'all' ? undefined : reportPropertyFilter)}
-                  className="rounded-full border border-[#33282C] bg-[#161112] px-3 py-1.5 text-xs font-semibold text-[#D07387] hover:border-[#7A3B4C]"
-                >
-                  Arrears CSV
-                </button>
-                {can('collectionRate') && (
-                <button
-                  type="button"
-                  onClick={() => downloadCollectionRateCsv()}
-                  className="rounded-full border border-[#33282C] bg-[#161112] px-3 py-1.5 text-xs font-semibold text-[#D07387] hover:border-[#7A3B4C]"
-                >
-                  Collection CSV
-                </button>
-                )}
-              </>
-              )}
-            </div>
-          </div>
-
-          {reportsError && <p className="mb-3 text-sm text-[#F47C8E]">{reportsError}</p>}
-
-          <div className="grid gap-6 xl:grid-cols-2">
-            <div>
-              <h3 className="mb-3 text-lg font-semibold text-[#F6F2F3]">Arrears by property</h3>
-              {arrears.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1]">
-                  No arrears data. Generate invoices and let payments reconcile to see totals.
-                </p>
-              ) : (
-                <>
-                <div className="space-y-3 sm:hidden">
-                  {arrears.map((row) => (
-                    <div key={row.property_id} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="font-semibold text-[#F6F2F3]">{row.property_name}</p>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${row.overdue_count > 0 ? 'bg-[#33161B] text-[#F08E9B]' : 'bg-[#14211B] text-[#4ADE80]'}`}>
-                          {row.overdue_count} overdue
-                        </span>
-                      </div>
-                      <dl className="mt-3 space-y-1 text-sm">
-                        <div className="flex justify-between gap-3">
-                          <dt className="text-[#A99FA3]">Invoiced</dt>
-                          <dd className="text-right text-[#D9D2D6]">{kes(row.total_invoiced)}</dd>
-                        </div>
-                        <div className="flex justify-between gap-3">
-                          <dt className="text-[#A99FA3]">Paid</dt>
-                          <dd className="text-right text-[#D9D2D6]">{kes(row.total_paid)}</dd>
-                        </div>
-                        <div className="flex justify-between gap-3">
-                          <dt className="text-[#A99FA3]">Outstanding</dt>
-                          <dd className="text-right font-semibold text-[#C65A70]">{kes(row.outstanding)}</dd>
-                        </div>
-                      </dl>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="hidden overflow-x-auto rounded-2xl border border-[#2C2326] sm:block">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="bg-[#221C1E] text-[#B5ABB0]">
-                      <tr>
-                        <th className="px-3 py-2 font-medium">Property</th>
-                        <th className="px-3 py-2 font-medium">Invoiced</th>
-                        <th className="px-3 py-2 font-medium">Paid</th>
-                        <th className="px-3 py-2 font-medium">Outstanding</th>
-                        <th className="px-3 py-2 font-medium">Overdue</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {arrears.map((row) => (
-                        <tr key={row.property_id} className="border-t border-[#2A2225]">
-                          <td className="px-3 py-2 font-medium text-[#F6F2F3]">{row.property_name}</td>
-                          <td className="px-3 py-2">{kes(row.total_invoiced)}</td>
-                          <td className="px-3 py-2">{kes(row.total_paid)}</td>
-                          <td className="px-3 py-2 font-semibold text-[#C65A70]">{kes(row.outstanding)}</td>
-                          <td className="px-3 py-2">
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${row.overdue_count > 0 ? 'bg-[#33161B] text-[#F08E9B]' : 'bg-[#14211B] text-[#4ADE80]'}`}>
-                              {row.overdue_count}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                </>
-              )}
-            </div>
-
-            {can('collectionRate') && (
-            <div>
-              <h3 className="mb-3 text-lg font-semibold text-[#F6F2F3]">Collection rate (12 months)</h3>
-              {collectionRate.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1]">No monthly collection data yet.</p>
-              ) : (
-                <>
-                <div className="space-y-3 sm:hidden">
-                  {[...collectionRate].reverse().map((row) => {
-                    const rate = Number(row.collection_rate_pct);
-                    return (
-                      <div key={row.month} className="rounded-2xl border border-[#2C2326] bg-[#1C1618] p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <p className="font-semibold text-[#F6F2F3]">{row.month}</p>
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${rate >= 90 ? 'bg-[#14211B] text-[#4ADE80]' : rate >= 70 ? 'bg-[#2B2116] text-[#F0B84B]' : 'bg-[#33161B] text-[#F08E9B]'}`}>
-                            {rate.toFixed(1)}%
-                          </span>
-                        </div>
-                        <dl className="mt-3 space-y-1 text-sm">
-                          <div className="flex justify-between gap-3">
-                            <dt className="text-[#A99FA3]">Invoiced</dt>
-                            <dd className="text-right text-[#D9D2D6]">{kes(row.invoiced)}</dd>
-                          </div>
-                          <div className="flex justify-between gap-3">
-                            <dt className="text-[#A99FA3]">Collected</dt>
-                            <dd className="text-right text-[#D9D2D6]">{kes(row.collected)}</dd>
-                          </div>
-                        </dl>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="hidden overflow-x-auto rounded-2xl border border-[#2C2326] sm:block">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="bg-[#221C1E] text-[#B5ABB0]">
-                      <tr>
-                        <th className="px-3 py-2 font-medium">Month</th>
-                        <th className="px-3 py-2 font-medium">Invoiced</th>
-                        <th className="px-3 py-2 font-medium">Collected</th>
-                        <th className="px-3 py-2 font-medium">Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...collectionRate].reverse().map((row) => (
-                        <tr key={row.month} className="border-t border-[#2A2225]">
-                          <td className="px-3 py-2 font-medium text-[#F6F2F3]">{row.month}</td>
-                          <td className="px-3 py-2">{kes(row.invoiced)}</td>
-                          <td className="px-3 py-2">{kes(row.collected)}</td>
-                          <td className="px-3 py-2">
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${Number(row.collection_rate_pct) >= 90 ? 'bg-[#14211B] text-[#4ADE80]' : Number(row.collection_rate_pct) >= 70 ? 'bg-[#2B2116] text-[#F0B84B]' : 'bg-[#33161B] text-[#F08E9B]'}`}>
-                              {Number(row.collection_rate_pct).toFixed(1)}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                </>
-              )}
-            </div>
-            )}
-          </div>
-
-          {can('tenantStatements') && (
-          <div className="mt-6 rounded-2xl border border-[#2C2326] bg-[#1C1618] p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <h3 className="text-lg font-semibold text-[#F6F2F3]">Tenant statement</h3>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={reportStatementTenantId}
-                  onChange={(event) => {
-                    setReportStatementTenantId(event.target.value === '' ? '' : Number(event.target.value));
-                    setTenantStatement(null);
-                  }}
-                  className="rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-1.5 text-sm"
-                >
-                  <option value="">Select tenant</option>
-                  {properties.map((property) => (
-                    <optgroup key={property.id} label={property.name}>
-                      {tenants.filter((tenant) => tenant.property_id === property.id).map((tenant) => (
-                        <option key={tenant.id} value={tenant.id}>{tenant.name} — {tenant.unit_number}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleTenantStatementLoad}
-                  disabled={reportStatementTenantId === ''}
-                  className="rounded-full bg-[#7A1428] px-4 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  View statement
-                </button>
-                {tenantStatement && can('csvExport') && (
-                  <button
-                    type="button"
-                    onClick={() => downloadTenantStatementCsv(tenantStatement.tenant.id, tenantStatement.tenant.name)}
-                    className="rounded-full border border-[#33282C] bg-[#161112] px-3 py-1.5 text-xs font-semibold text-[#D07387] hover:border-[#7A3B4C]"
-                  >
-                    Statement CSV
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {tenantStatement ? (
-              <>
-                <div className="mt-3 space-y-3 sm:hidden">
-                  {tenantStatement.statement.length === 0 ? (
-                    <p className="rounded-2xl border border-dashed border-[#3A2E32] bg-[#1C1618] p-4 text-sm text-[#A49DA1]">
-                      No activity for this tenant yet.
-                    </p>
-                  ) : (
-                    tenantStatement.statement.map((entry, index) => (
-                      <div
-                        key={`${entry.ref_number}-${index}`}
-                        className={`rounded-2xl border border-[#2C2326] p-3 ${entry.type === 'invoice' ? 'bg-[#201A1C]' : 'bg-[#161112]'}`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${entry.type === 'invoice' ? 'bg-[#2B1A1E] text-[#C65A70]' : 'bg-[#14211B] text-[#4ADE80]'}`}>
-                            {entry.type}
-                          </span>
-                          <span className="text-right text-sm font-semibold text-[#F6F2F3]">
-                            {Number(entry.amount) > 0 ? '+' : ''}
-                            {kes(entry.amount)}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm text-[#D9D2D6]">{entry.ref_number}</p>
-                        <p className="mt-1 text-xs text-[#8A8085]">
-                          {new Date(entry.occurred_at).toLocaleDateString()} · balance {kes(entry.running_balance)}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-[#2C2326] bg-[#161112] sm:block">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-[#221C1E] text-[#B5ABB0]">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Type</th>
-                      <th className="px-3 py-2 font-medium">Reference</th>
-                      <th className="px-3 py-2 font-medium">Date</th>
-                      <th className="px-3 py-2 font-medium">Amount</th>
-                      <th className="px-3 py-2 font-medium">Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tenantStatement.statement.length === 0 ? (
-                      <tr><td colSpan={5} className="px-3 py-4 text-[#A49DA1]">No activity for this tenant yet.</td></tr>
-                    ) : (
-                      tenantStatement.statement.map((entry, index) => (
-                        <tr key={`${entry.ref_number}-${index}`} className={`border-t border-[#2A2225] ${entry.type === 'invoice' ? 'bg-[#201A1C]' : ''}`}>
-                          <td className="px-3 py-2 capitalize">
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${entry.type === 'invoice' ? 'bg-[#2B1A1E] text-[#C65A70]' : 'bg-[#14211B] text-[#4ADE80]'}`}>
-                              {entry.type}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">{entry.ref_number}</td>
-                          <td className="px-3 py-2">{new Date(entry.occurred_at).toLocaleDateString()}</td>
-                            <td className="px-3 py-2">
-                              {Number(entry.amount) > 0 ? '+' : ''}
-                              {kes(entry.amount)}
-                            </td>
-                          <td className="px-3 py-2 font-semibold text-[#F6F2F3]">{kes(entry.running_balance)}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              </>
-            ) : (
-              <p className="mt-3 text-sm text-[#A49DA1]">Select a tenant to view their full invoice + payment history with running balance.</p>
-            )}
-          </div>
-          )}
-        </section>
-
-        {can('maintenance') && (
-        <section className="mt-8 rounded-3xl border border-[#2C2326] bg-[#161112] p-4 sm:p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
-          <h2 className="text-xl font-semibold text-[#F6F2F3]">Maintenance</h2>
-          <form className="mt-4 grid gap-4 lg:grid-cols-2" onSubmit={handleMaintenanceSubmit}>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Property</label>
-              <select value={maintenanceForm.property_id} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, property_id: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2">
-                <option value="">Select property</option>
-                {properties.map((property) => (
-                  <option key={property.id} value={property.id}>{property.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Tenant</label>
-              <select value={maintenanceForm.tenant_id} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, tenant_id: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2">
-                <option value="">Optional tenant</option>
-                {tenants.map((tenant) => (
-                  <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Title</label>
-              <input value={maintenanceForm.title} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, title: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Priority</label>
-              <select value={maintenanceForm.priority} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, priority: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2">
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
-
-            <div className="lg:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Description</label>
-              <textarea value={maintenanceForm.description} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, description: event.target.value })} rows={3} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2" />
-            </div>
-
-            <div className="lg:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-[#C9C0C4]">Status</label>
-              <select value={maintenanceForm.status} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, status: event.target.value })} className="w-full rounded-lg border border-[#2A2225] bg-[#161112] px-3 py-2">
-                <option value="open">Open</option>
-                <option value="in_progress">In progress</option>
-                <option value="resolved">Resolved</option>
-                <option value="closed">Closed</option>
-              </select>
-            </div>
-
-            <div className="lg:col-span-2">
-              <button type="submit" disabled={loading} className="w-full rounded-xl bg-[#7A1428] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] disabled:cursor-not-allowed disabled:opacity-60">{loading ? 'Saving...' : 'Create maintenance request'}</button>
-            </div>
-          </form>
-
-          {/* Landlord action queue + escalation */}
-          {maintenanceActionQueue.length > 0 && (
-            <div className="mt-6 rounded-2xl border border-[#4A3820] bg-[#2B2116] p-4">
-              <h3 className="text-sm font-semibold text-[#F2C060]">Landlord action queue — {maintenanceActionQueue.length} open</h3>
-              <p className="mt-1 text-xs text-[#F0B84B]">Filtered by your properties only (owner_id isolation). Urgent first, then by age.</p>
-              {escalatedUrgent.length > 0 && (
-                <p className="mt-2 rounded-lg bg-[#2E1519] px-3 py-2 text-xs font-semibold text-[#F08E9B]">⚠ {escalatedUrgent.length} urgent repair(s) older than 48h — escalated</p>
-              )}
-              <div className="mt-3 space-y-2">
-                {maintenanceActionQueue.slice(0, 5).map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl bg-[#161112] px-3 py-2 text-sm">
-                    <span><span className={`mr-2 rounded-full px-2 py-0.5 text-xs font-semibold ${item.priority === 'urgent' ? 'bg-[#33161B] text-[#F08E9B]' : item.priority === 'high' ? 'bg-[#2B2116] text-[#F0B84B]' : 'bg-[#221C1E] text-[#B0A8AD]'}`}>{item.priority}</span> {item.title} • {item.property_name}</span>
-                    <span className="text-xs text-[#A49DA1]">{new Date(item.created_at).toLocaleDateString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {maintenance.length > 0 && (
-            <div className="mt-6 space-y-3">
-              {maintenance.map((item) => {
-                const isEscalated = item.priority === 'urgent' && item.status !== 'resolved' && item.status !== 'closed' && Date.now() - new Date(item.created_at).getTime() > 48 * 3600 * 1000;
-                return (
-                  <div key={item.id} className={`rounded-xl border p-4 ${isEscalated ? 'border-[#4A2127] bg-[#2E1519]' : 'border-[#2A2225] bg-[#161112]'}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <h3 className="font-semibold text-ink">{item.title} {isEscalated && <span className="ml-2 rounded-full bg-red-600 px-2 py-0.5 text-xs text-white">Escalated</span>}</h3>
-                        <p className="text-sm text-[#A49DA1]">{item.property_name || 'Property'} • {item.tenant_name || 'No tenant'} — isolated to your properties</p>
-                      </div>
-                      <span className="rounded-full bg-[#2B2116] px-2.5 py-1 text-xs font-semibold text-[#F0B84B]">{item.priority}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-[#B0A8AD]">{item.description}</p>
-                    <p className="mt-1 text-xs text-[#A49DA1]">Status: <span className="font-medium text-ink">{item.status}</span> • Created {new Date(item.created_at).toLocaleString()}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {item.status === 'open' && <button type="button" onClick={() => handleMaintenanceStatusChange(item.id, 'in_progress')} className="rounded-full bg-[#7A1428] px-3 py-1 text-xs font-semibold text-white">Start → In progress</button>}
-                      {item.status === 'in_progress' && <button type="button" onClick={() => handleMaintenanceStatusChange(item.id, 'resolved')} className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">Resolve</button>}
-                      {item.status === 'resolved' && <button type="button" onClick={() => handleMaintenanceStatusChange(item.id, 'closed')} className="rounded-full bg-gray-800 px-3 py-1 text-xs font-semibold text-white">Close</button>}
-                      {item.priority !== 'urgent' && item.status !== 'closed' && item.status !== 'resolved' && <button type="button" onClick={() => handleMaintenanceEscalate(item.id)} className="rounded-full border border-[#4A2127] bg-[#161112] px-3 py-1 text-xs font-semibold text-[#F08E9B]">Escalate to urgent</button>}
-                      <button type="button" onClick={() => handleMaintenanceDelete(item.id)} className="rounded-full border border-[#2A2225] bg-[#161112] px-3 py-1 text-xs text-[#B0A8AD]">Delete</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-        )}
-      </div>
-    </div>
+    <DashboardContext.Provider value={dashboard}>
+      <AppShell />
+    </DashboardContext.Provider>
   );
 }

@@ -362,13 +362,13 @@ export function BulkTenantImport({
   };
 
   return (
-    <div className="rounded-3xl border border-[#2C2326] bg-[#161112] p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
+    <div className="rounded-3xl border border-line bg-card p-6 shadow-[0_12px_26px_rgba(0,0,0,0.4)]">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold text-[#F6F2F3]">Bulk import tenants</h2>
+        <h2 className="text-xl font-semibold text-heading">Bulk import tenants</h2>
         <button
           type="button"
           onClick={downloadTemplate}
-          className="rounded-full border border-[#33282C] bg-[#161112] px-4 py-2 text-sm font-medium text-[#CFC5CA] hover:border-[#7A3B4C] hover:text-[#C65A70]"
+          className="rounded-full border border-line-strong bg-card px-4 py-2 text-sm font-medium text-ink hover:border-accent hover:text-accent"
         >
           Download template
         </button>
@@ -382,26 +382,26 @@ export function BulkTenantImport({
           }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={onDrop}
-          className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center ${isDragging ? 'border-[#7A1428] bg-[#201A1C]' : 'border-[#3A2E32] bg-[#1C1618]'}`}
+          className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center ${isDragging ? 'border-accent bg-subtle' : 'border-line-strong bg-subtle'}`}
         >
-          <p className="text-sm font-medium text-[#F6F2F3]">Import from spreadsheet</p>
-          <p className="mt-1 text-xs text-[#A49DA1]">Accepts .csv and .xlsx — use the template headers (no column mapping yet).</p>
-          <label className="mt-4 cursor-pointer rounded-full bg-[#7A1428] px-5 py-2 text-sm font-semibold text-white hover:bg-[#8E1A30]">
+          <p className="text-sm font-medium text-heading">Import from spreadsheet</p>
+          <p className="mt-1 text-xs text-muted">Accepts .csv and .xlsx — use the template headers (no column mapping yet).</p>
+          <label className="mt-4 cursor-pointer rounded-full bg-accent px-5 py-2 text-sm font-semibold text-accent-ink hover:bg-accent-hover">
             Choose file
             <input type="file" accept=".csv,.xlsx" onChange={onFileInput} className="hidden" />
           </label>
-          <p className="mt-2 text-xs text-[#8A8085]">Parsing happens in your browser — nothing is saved until you click Import.</p>
+          <p className="mt-2 text-xs text-faint">Parsing happens in your browser — nothing is saved until you click Import.</p>
         </div>
       )}
 
-      {error && <p className="mt-4 rounded-xl bg-[#2E1519] px-3 py-2 text-sm text-[#F08E9B]" role="alert">{error}</p>}
-      {warning && <p className="mt-4 rounded-xl bg-[#2B2116] px-3 py-2 text-sm text-[#F2C060]">{warning}</p>}
+      {error && <p className="mt-4 rounded-xl bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-text)]" role="alert">{error}</p>}
+      {warning && <p className="mt-4 rounded-xl bg-[var(--warning-soft)] px-3 py-2 text-sm text-[var(--warning-text)]">{warning}</p>}
 
       {preview && (
         <div className="mt-6">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-medium text-[#F6F2F3]">
-              {summary?.valid} of {summary?.total} rows ready to import {fileName && <span className="font-normal text-[#A49DA1]">— {fileName}</span>}
+            <p className="text-sm font-medium text-heading">
+              {summary?.valid} of {summary?.total} rows ready to import {fileName && <span className="font-normal text-muted">— {fileName}</span>}
             </p>
             <div className="flex gap-2">
               <button
@@ -412,7 +412,7 @@ export function BulkTenantImport({
                   setError(null);
                   setWarning(null);
                 }}
-                className="rounded-full border border-[#2A2225] bg-[#161112] px-4 py-1.5 text-sm font-medium text-[#C9C0C4]"
+                className="rounded-full border border-line bg-card px-4 py-1.5 text-sm font-medium text-ink"
               >
                 Clear
               </button>
@@ -420,7 +420,7 @@ export function BulkTenantImport({
                 type="button"
                 onClick={downloadSkipped}
                 disabled={!preview.some((r) => r.status === 'needs_fixing') && !result?.skippedRows?.length}
-                className="rounded-full border border-[#33282C] bg-[#161112] px-4 py-1.5 text-sm font-medium text-[#CFC5CA] disabled:opacity-50"
+                className="rounded-full border border-line-strong bg-card px-4 py-1.5 text-sm font-medium text-ink disabled:opacity-50"
               >
                 Download skipped CSV
               </button>
@@ -428,16 +428,16 @@ export function BulkTenantImport({
                 type="button"
                 onClick={handleImport}
                 disabled={importing || (summary?.valid ?? 0) === 0}
-                className="rounded-full bg-[#7A1428] px-5 py-1.5 text-sm font-semibold text-white disabled:opacity-50 hover:bg-[#8E1A30]"
+                className="rounded-full bg-accent px-5 py-1.5 text-sm font-semibold text-accent-ink disabled:opacity-50 hover:bg-accent-hover"
               >
                 {importing ? 'Importing...' : `Import ${summary?.valid} tenants`}
               </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-[#2C2326]">
+          <div className="overflow-x-auto rounded-2xl border border-line">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-[#221C1E] text-[#B5ABB0]">
+              <thead className="bg-hover text-muted">
                 <tr>
                   <th className="px-3 py-2">#</th>
                   <th className="px-3 py-2">Property Name</th>
@@ -452,49 +452,49 @@ export function BulkTenantImport({
               </thead>
               <tbody>
                 {preview.map((row) => (
-                  <tr key={row.idx} className={row.status === 'valid' ? 'bg-[#161112]' : 'bg-[#2E1519]'}>
-                    <td className="px-3 py-2 text-[#A49DA1]">{row.idx + 1}</td>
+                  <tr key={row.idx} className={row.status === 'valid' ? 'bg-card' : 'bg-[var(--danger-soft)]'}>
+                    <td className="px-3 py-2 text-muted">{row.idx + 1}</td>
                     {(HEADERS as readonly string[]).map((h) => (
                       <td key={h} className="px-2 py-1">
                         <input
                           value={String(row.edited[h] ?? '')}
                           onChange={(e) => updateCell(row.idx, h as any, e.target.value)}
-                          className={`w-full rounded border px-2 py-1 text-sm ${row.status === 'valid' ? 'border-[#2A2225] bg-[#161112]' : 'border-[#4A2127] bg-[#161112]'}`}
+                          className={`w-full rounded border px-2 py-1 text-sm ${row.status === 'valid' ? 'border-line bg-card' : 'border-[var(--danger-soft)] bg-card'}`}
                         />
                       </td>
                     ))}
                     <td className="px-3 py-2">
                       {row.status === 'valid' ? (
-                        <span className="rounded-full bg-[#14211B] px-2 py-1 text-xs font-semibold text-[#4ADE80]">Valid</span>
+                        <span className="rounded-full bg-[var(--success-soft)] px-2 py-1 text-xs font-semibold text-[var(--success-text)]">Valid</span>
                       ) : (
-                        <span className="rounded-full bg-[#33161B] px-2 py-1 text-xs font-semibold text-[#F08E9B]" title={row.reason}>
+                        <span className="rounded-full bg-[var(--danger-soft)] px-2 py-1 text-xs font-semibold text-[var(--danger-text)]" title={row.reason}>
                           Needs fixing
                         </span>
                       )}
-                      {row.status === 'needs_fixing' && <div className="mt-1 max-w-[200px] text-xs text-[#F47C8E]">{row.reason}</div>}
+                      {row.status === 'needs_fixing' && <div className="mt-1 max-w-[200px] text-xs text-[var(--danger-text)]">{row.reason}</div>}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {importing && <div className="mt-3 flex items-center gap-2 text-sm text-[#A49DA1]"><span className="h-4 w-4 animate-spin rounded-full border-2 border-[#3A3134] border-t-[#C65A70]" /> Importing in a single transaction…</div>}
+          {importing && <div className="mt-3 flex items-center gap-2 text-sm text-muted"><span className="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-accent" /> Importing in a single transaction…</div>}
         </div>
       )}
 
       {result && (
-        <div className="mt-6 rounded-2xl border border-[#261F22] bg-[#141012] p-4">
-          <p className="text-sm font-semibold text-[#F6F2F3]">{result.imported} tenants imported, {result.skipped} skipped</p>
-          <p className="mt-1 text-xs text-[#A49DA1]">Valid rows were saved in one transaction per batch (tenant + unit occupied). Skipped rows were not saved.</p>
+        <div className="mt-6 rounded-2xl border border-line bg-page p-4">
+          <p className="text-sm font-semibold text-heading">{result.imported} tenants imported, {result.skipped} skipped</p>
+          <p className="mt-1 text-xs text-muted">Valid rows were saved in one transaction per batch (tenant + unit occupied). Skipped rows were not saved.</p>
           {result.skipped > 0 && (
-            <button type="button" onClick={downloadSkipped} className="mt-3 rounded-full bg-[#161112] px-4 py-1.5 text-sm font-medium text-[#C65A70] shadow-sm">
+            <button type="button" onClick={downloadSkipped} className="mt-3 rounded-full bg-card px-4 py-1.5 text-sm font-medium text-accent shadow-sm">
               Download skipped rows CSV
             </button>
           )}
           <button
             type="button"
             onClick={() => setResult(null)}
-            className="ml-2 rounded-full px-4 py-1.5 text-sm text-[#B0A8AD]"
+            className="ml-2 rounded-full px-4 py-1.5 text-sm text-muted"
           >
             Done
           </button>
