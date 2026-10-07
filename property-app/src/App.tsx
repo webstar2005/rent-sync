@@ -90,7 +90,10 @@ export default function App() {
   const [propertyForm, setPropertyForm] = useState({
     name: '',
     address: '',
-    units: '1',
+    // Deliberately blank rather than '1': the declared unit count is what the plan cap measures and
+    // what the Units panel materialises rows from, so a landlord who forgets to change a pre-filled
+    // "1" declares their whole block as a single flat. validatePropertyForm already rejects blank.
+    units: '',
     rent_due_day: '5',
   });
   const [editingPropertyId, setEditingPropertyId] = useState<number | null>(null);
@@ -622,7 +625,7 @@ export default function App() {
         rent_due_day: Number(propertyForm.rent_due_day),
       } as any);
 
-      setPropertyForm({ name: '', address: '', units: '1', rent_due_day: '5' });
+      setPropertyForm({ name: '', address: '', units: '', rent_due_day: '5' });
       setPropertyErrors({});
       await loadProperties();
     } catch (err) {
@@ -2015,6 +2018,7 @@ export default function App() {
               <input
                 type="number"
                 min="1"
+                placeholder="e.g. 72"
                 value={propertyForm.units}
                 onChange={(event) => setPropertyForm({ ...propertyForm, units: event.target.value })}
                 className={`w-full rounded-lg border bg-[#161112] px-3 py-2 ${propertyErrors.units ? 'border-[#5C2730]' : 'border-[#2A2225]'}`}
