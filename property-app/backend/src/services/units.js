@@ -1,5 +1,38 @@
 import { query } from '../config/db.js';
 import { PLANS, getPlan, planKeyFor } from '../config/plans.js';
+import { logger } from '../utils/logger.js';
+
+/**
+ * Reconcile one property's `units` rows against its declared count and its active tenants.
+ *
+ * `properties.units` is a number, not a list: nothing in the schema ties a declared unit to a row,
+ * so every write that can change the projection (a property created or resized, a tenant added,
+ * moved out, or deleted) has to call this or the Units panel renders a number the landlord can see
+ * but not manage. Migration 015 backfills the rows that were already missing; this is what stops
+ * them going missing again.
+ *
+ * Returns how many unit rows were created. It never throws: by the time it runs the property or
+ * tenant has already been written, and turning a successful insert into a 500 - which the caller
+ * would then retry, duplicating the record - costs more than a stale unit list. Failures are logged
+ * at error level rather than swallowed, so a database without migration 015 says so on every write
+ * instead of quietly reproducing the original bug.
+ */
+export async function materialiseUnits(propertyId) {
+  try {
+    const result = await query('SELECT materialise_units($1) AS created', [propertyId]);
+    return result.rows[0]?.created ?? 0;
+  } catch (error) {
+    if (error.code === '42883') {
+      logger.error(
+        { propertyId },
+        'materialise_units() is missing - apply database/migrations/015_materialise_units.sql'
+      );
+    } else {
+      logger.error({ err: error.message, propertyId }, 'Failed to materialise units');
+    }
+    return 0;
+  }
+}
 
 // What a landlord is charged for, and what stops them going over.
 //

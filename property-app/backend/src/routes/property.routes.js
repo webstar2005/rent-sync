@@ -4,7 +4,7 @@ import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePaid } from '../middleware/subscription.js';
 import { requireRole } from '../middleware/role.js';
-import { checkUnitCapacity, unitLimitResponse } from '../services/units.js';
+import { checkUnitCapacity, materialiseUnits, unitLimitResponse } from '../services/units.js';
 import { logger } from '../utils/logger.js'
 
 const router = express.Router();
@@ -60,6 +60,10 @@ router.post('/', async (req, res) => {
       [req.user.sub, payload.name, payload.address, payload.units ?? 1, payload.rent_due_day ?? 5]
     );
 
+    // Declaring 72 units used to leave the property with none of them as rows, so the Units panel
+    // opened on an empty list for a building the form had just said was full.
+    await materialiseUnits(result.rows[0].id);
+
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -112,6 +116,9 @@ router.patch('/:propertyId', async (req, res) => {
       `UPDATE properties SET ${fields.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING *`,
       values
     );
+    // Raising `units` from 4 to 40 has to produce 36 more rows, or the declared count and the
+    // panel disagree until something else happens to touch the property.
+    await materialiseUnits(propertyId);
     return res.json(result.rows[0]);
   } catch (error) {
     if (error instanceof z.ZodError) {

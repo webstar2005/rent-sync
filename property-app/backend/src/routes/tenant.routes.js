@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePaid } from '../middleware/subscription.js';
 import { bulkLimiter } from '../middleware/rateLimit.js';
 import { requireFeature } from '../middleware/plan.js';
+import { materialiseUnits } from '../services/units.js';
 import { logger } from '../utils/logger.js';
 
 // --- Bulk import helpers (Section 11 Core CRUD phase) ---
@@ -161,11 +162,17 @@ router.post('/bulk', bulkLimiter, requireFeature('bulkImport'), async (req, res)
         [t.property_id, t.name, t.phone, t.unit_number, t.monthly_rent, t.lease_start, t.lease_end]
       );
       inserted.push(r.rows[0]);
-      // Optionally update a units table if it existed — spec says update unit status to occupied
-      // This backend has no separate units table (tenants.unit_number is the source), so tenant status active suffices
     }
 
     await client.query('COMMIT');
+
+    // This path inserts tenants directly rather than through POST /api/tenants, so the unit rows
+    // those tenants imply have to be brought in here too. Outside the transaction on purpose: a
+    // stale unit list is recoverable, rolling back an import that already succeeded is not.
+    for (const propertyId of new Set(inserted.map((t) => t.property_id))) {
+      await materialiseUnits(propertyId);
+    }
+
     return res.json({
       imported: inserted.length,
       skipped: skipped.length,
@@ -225,6 +232,10 @@ router.post('/', async (req, res) => {
       [payload.property_id, payload.name, payload.phone ?? null, payload.unit_number, payload.monthly_rent, payload.status]
     );
 
+    // Nothing else writes a unit row, so without this the tenant exists and the flat it occupies
+    // still reads as vacant - which is how the one tenant on Block AB had no unit record at all.
+    await materialiseUnits(payload.property_id);
+
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -242,7 +253,7 @@ router.patch('/:tenantId/status', async (req, res) => {
     const payload = tenantStatusSchema.parse(req.body);
 
     const tenantCheck = await query(
-      `SELECT t.id
+      `SELECT t.id, t.property_id
        FROM tenants t
        JOIN properties p ON p.id = t.property_id
        WHERE t.id = $1 AND p.owner_id = $2`,
@@ -261,6 +272,9 @@ router.patch('/:tenantId/status', async (req, res) => {
       [payload.status, tenantId]
     );
 
+    // Moving out releases the flat: without this the unit stays `occupied` with no tenant in it.
+    await materialiseUnits(tenantCheck.rows[0].property_id);
+
     return res.json(result.rows[0]);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -277,7 +291,7 @@ router.delete('/:tenantId', async (req, res) => {
     const tenantId = Number(req.params.tenantId);
 
     const tenantCheck = await query(
-      `SELECT t.id
+      `SELECT t.id, t.property_id
        FROM tenants t
        JOIN properties p ON p.id = t.property_id
        WHERE t.id = $1 AND p.owner_id = $2`,
@@ -288,7 +302,10 @@ router.delete('/:tenantId', async (req, res) => {
       return res.status(403).json({ message: 'You do not own this tenant' });
     }
 
+    // ON DELETE SET NULL clears units.tenant_id but leaves status='occupied', so the flat would
+    // still read as taken by nobody. Reconciling here turns it back into a lettable vacancy.
     await query('DELETE FROM tenants WHERE id = $1', [tenantId]);
+    await materialiseUnits(tenantCheck.rows[0].property_id);
     return res.status(204).send();
   } catch (error) {
     logger.error({ err: error.message }, 'Failed to delete tenant');
