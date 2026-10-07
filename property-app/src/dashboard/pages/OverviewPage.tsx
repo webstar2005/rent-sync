@@ -46,7 +46,8 @@ export function OverviewPage() {
       <div className="rs-stat-band">
         <div className="rs-stats">
           <StatPill shade={1} label="Properties" value={d.properties.length} loading={d.dataLoading} />
-          <StatPill shade={2} label="Tenants" value={d.tenants.length} loading={d.dataLoading} />
+          <StatPill shade={2} label="Tenants" value={d.properties.reduce((sum, property) => sum + (property.units ?? 0), 0)} loading={d.dataLoading} />
+
           <StatPill shade={3} label="Collected" value={kes(d.totalCollected)} loading={d.dataLoading} />
           <StatPill shade={4} label="Outstanding" value={kes(d.totalOutstanding)} loading={d.dataLoading} />
         </div>
