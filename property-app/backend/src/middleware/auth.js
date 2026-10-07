@@ -1,5 +1,6 @@
 import { verifyToken } from '../utils/auth.js';
 import { query } from '../config/db.js';
+import { asPaid } from '../config/devAccess.js';
 import { logger } from '../utils/logger.js';
 
 // Authenticates the JWT and then re-validates against the live user row on EVERY request:
@@ -38,7 +39,10 @@ export async function requireAuth(req, res, next) {
       return res.status(401).json({ message: 'Session has been revoked — sign in again' });
     }
 
-    req.user = {
+    // Wrapped in asPaid so a development machine can open the paywall in one place: this object is
+    // what requirePaid, requireFeature and the billing response all read, so gating stays a single
+    // decision instead of a check copied into each one. It is a no-op unless the dev switch is set.
+    req.user = asPaid({
       sub: user.id,
       id: user.id,
       name: user.name,
@@ -50,7 +54,7 @@ export async function requireAuth(req, res, next) {
       plan: user.plan,
       units_limit: user.units_limit,
       activated_at: user.activated_at,
-    };
+    });
     next();
     } catch (error) {
       // Logged, not swallowed: this failed silently as a bare 500 on every authenticated route when

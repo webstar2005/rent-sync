@@ -4,6 +4,7 @@ import { query } from '../config/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { generalLimiter } from '../middleware/rateLimit.js';
 import { BILLING, PLANS, featuresForPlan, getPlan, isPlanKey, planKeyFor } from '../config/plans.js';
+import { asPaid } from '../config/devAccess.js';
 import { unitUsageFor } from '../services/units.js';
 import { logger } from '../utils/logger.js';
 
@@ -36,12 +37,17 @@ const requestSchema = z.object({
 router.get('/me', async (req, res) => {
   try {
     const result = await query(
-      `SELECT plan, subscription_status, units_limit, activated_at,
+      `SELECT email, plan, subscription_status, units_limit, activated_at,
               payment_confirmed_at, payment_reference
        FROM users WHERE id = $1`,
       [req.user.id]
     );
-    const row = result.rows[0];
+    // asPaid keeps this response in step with req.user. It is the one call the dashboard makes to
+    // decide whether to render the paywall, so if it disagreed with requirePaid the account would
+    // either see a paywall over a working API or a dashboard whose data every request 402s on.
+    // email is selected for that call and nothing else: asPaid scopes by address, and a row
+    // without one leaves the paywall shut rather than opening it by accident.
+    const row = asPaid(result.rows[0]);
     const plan = row?.plan ? PLANS[row.plan] : null;
 
     const pending = await query(
