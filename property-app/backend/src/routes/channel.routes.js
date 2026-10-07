@@ -139,6 +139,57 @@ router.patch('/:channelId', async (req, res) => {
   }
 });
 
+// Delete a channel the landlord no longer wants. Only possible while nothing points at it: the
+// foreign keys from payments, reconciliation events and the callback log are all ON DELETE SET NULL,
+// so removing the row would quietly sever those records from the channel they came through and the
+// landlord would lose the one link showing which till the money arrived on. History is deactivated
+// instead - which is what the PATCH route above is for - and deletion is for a channel that was
+// added by mistake and never used.
+router.delete('/:channelId', async (req, res) => {
+  try {
+    const channelId = Number(req.params.channelId);
+
+    const owned = await query(
+      `SELECT id FROM payment_channels WHERE id = $1 AND owner_id = $2`,
+      [channelId, req.user.sub]
+    );
+    if (owned.rows.length === 0) {
+      return res.status(403).json({ message: 'You do not own this payment channel' });
+    }
+
+    const history = await query(
+      `SELECT (SELECT count(*) FROM payments WHERE payment_channel_id = $1)::int AS payments,
+              (SELECT count(*) FROM payment_reconciliation_events WHERE payment_channel_id = $1)::int AS events,
+              (SELECT count(*) FROM payhero_callback_log WHERE matched_channel_id = $1)::int AS callbacks`,
+      [channelId]
+    );
+    const { payments, events, callbacks } = history.rows[0];
+    const total = payments + events + callbacks;
+
+    if (total > 0) {
+      const parts = [];
+      if (payments > 0) parts.push(`${payments} payment${payments === 1 ? '' : 's'}`);
+      if (events > 0) parts.push(`${events} reconciliation event${events === 1 ? '' : 's'}`);
+      if (callbacks > 0) parts.push(`${callbacks} callback${callbacks === 1 ? '' : 's'}`);
+      return res.status(409).json({
+        code: 'channel_has_history',
+        message:
+          `This channel has history against it (${parts.join(', ')}), so it cannot be deleted - ` +
+          'deactivating it keeps those records tied to where the money came through.',
+        payments,
+        events,
+        callbacks,
+      });
+    }
+
+    await query('DELETE FROM payment_channels WHERE id = $1 AND owner_id = $2', [channelId, req.user.sub]);
+    return res.status(204).send();
+  } catch (error) {
+    logger.error({ err: error.message }, 'Failed to delete payment channel');
+    return res.status(500).json({ message: 'Failed to delete payment channel' });
+  }
+});
+
 // Re-sync channel verification/activation status with PayHero (ownership confirmation step).
 router.post('/:channelId/sync', async (req, res) => {
   try {

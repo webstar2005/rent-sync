@@ -46,6 +46,13 @@ export function syncPaymentChannel(channelId: number) {
   return api.post<PaymentChannel>(`/api/payment-channels/${channelId}/sync`, {});
 }
 
+// Refused by the server with 409 while any payment, reconciliation event or callback still points
+// at the channel - deleting would sever them from where the money came through. The caller renders
+// the server's message rather than inventing its own.
+export function deletePaymentChannel(channelId: number) {
+  return api.delete<void>(`/api/payment-channels/${channelId}`);
+}
+
 export function getPayHeroWalletBalance() {
   return api.get<WalletBalance>('/api/payment-channels/wallet');
 }

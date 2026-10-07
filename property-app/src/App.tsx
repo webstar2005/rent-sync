@@ -9,7 +9,7 @@ import { createTenant, deleteTenant, getTenants, updateTenantStatus, type Tenant
 import { getInvoices, generateInvoices, type Invoice } from './lib/api/invoices';
 import { getPayments, createPayment, type Payment } from './lib/api/payments';
 import { createMaintenanceRequest, getMaintenanceRequests, updateMaintenanceRequest, deleteMaintenanceRequest, type MaintenanceRequest } from './lib/api/maintenance';
-import { createPaymentChannel, getPaymentChannels, syncPaymentChannel, updatePaymentChannel, type PaymentChannel } from './lib/api/channels';
+import { createPaymentChannel, deletePaymentChannel, getPaymentChannels, syncPaymentChannel, updatePaymentChannel, type PaymentChannel } from './lib/api/channels';
 import { getReconciliationAlerts, getReconciliationSummary, reconcilePayment, type ReconciliationAlert } from './lib/api/reconciliation';
 import {
   getArrears,
@@ -777,6 +777,20 @@ export default function App() {
     }
   }
 
+  async function handlePaymentChannelDelete(channel: PaymentChannel) {
+    const label = channel.description || channel.short_code;
+    if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
+    setPaymentChannelError('');
+    try {
+      await deletePaymentChannel(channel.id);
+      await loadPaymentChannels();
+    } catch (err) {
+      // A channel with payments against it comes back as 409 with the server's own wording, which
+      // is more specific than anything this screen could say - so it is shown as-is.
+      setPaymentChannelError(err instanceof Error ? err.message : 'Failed to delete payment channel');
+    }
+  }
+
   async function handleTenantSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
@@ -1441,7 +1455,11 @@ export default function App() {
                 </thead>
                 <tbody>
                   {tenantRoster.map((tenant) => (
-                    <tr key={tenant.id} className="border-t border-[#2A2225]">
+                    <tr
+                      key={tenant.id}
+                      onClick={() => setSelectedTenantId(tenant.id)}
+                      className="cursor-pointer border-t border-[#2A2225] transition hover:bg-[#1C1618]"
+                    >
                       <td className="px-3 py-2">
                         <span className="font-medium text-[#F6F2F3]">{tenant.name}</span>
                         {tenant.phone && <span className="ml-2 text-xs text-[#A49DA1]">{tenant.phone}</span>}
@@ -2177,9 +2195,13 @@ export default function App() {
                 <button type="submit" disabled={paymentChannelLoading || !paymentChannelForm.short_code.trim()} className="w-full rounded-xl bg-[#7A1428] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] disabled:cursor-not-allowed disabled:opacity-60">
                   {paymentChannelLoading ? 'Registering with PayHero...' : 'Add payment channel'}
                 </button>
-                {paymentChannelError && <p className="mt-2 text-xs text-[#F47C8E]">{paymentChannelError}</p>}
               </div>
             </form>
+
+            {/* Sits between the form and the channel list rather than inside the submit block: a
+                refused delete names the row the landlord just tried to remove, and that row is
+                below. */}
+            {paymentChannelError && <p className="mt-3 text-xs text-[#F47C8E]">{paymentChannelError}</p>}
 
             {paymentChannels.length === 0 ? (
               <p className="mt-4 text-sm text-[#A49DA1]">No payment channels yet. Add a Paybill, Till, or Bank channel above — PayHero requires an ownership-confirmation step before incoming payments activate.</p>
@@ -2208,6 +2230,13 @@ export default function App() {
                         className={`rounded-full px-3 py-1 text-xs font-semibold ${channel.is_active ? 'bg-[#7A1428] text-white' : 'bg-[#2B1A1E] text-[#C65A70]'}`}
                       >
                         {channel.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePaymentChannelDelete(channel)}
+                        className="rounded-full border border-[#4A2127] bg-[#2E1519] px-3 py-1 text-xs font-semibold text-[#F08E9B] hover:border-[#7A3B4C]"
+                      >
+                        Delete
                       </button>
                     </div>
                   </li>
