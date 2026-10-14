@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { googleLogin, login, logout, register, type AuthUser } from './lib/api/auth';
 import { getBilling, type Entitlement, type Feature } from './lib/api/billing';
-import { getApiHealth } from './lib/api/client';
+import { getApiHealth, isApiError } from './lib/api/client';
 import { createProperty, getProperties, updateProperty, deleteProperty, type Property } from './lib/api/properties';
 import { kes } from './lib/format';
 import { createTenant, deleteTenant, getTenants, updateTenantStatus, type Tenant } from './lib/api/tenants';
@@ -268,15 +268,24 @@ export default function App() {
           }
         }
       })
-      // A failure here is deliberately swallowed. If billing is unreachable we leave the status null
-      // and let the dashboard render: failing closed here would take a paying customer offline
-      // because of our own outage, which is worse than briefly showing someone paid-for features.
-      .catch(() => {
+      // A billing failure must never leave a silent 0/0/0/0 dashboard: either the token is
+      // dead (401 → force login) or the backend is flaky (still try loading data fail-open,
+      // with an error banner so Refresh has something to explain).
+      .catch((err) => {
+        if (isApiError(err, 401)) {
+          localStorage.removeItem('property_app_token');
+          localStorage.removeItem('property_app_user');
+          setUser(null);
+          setSubscriptionStatus(null);
+          setEntitlement(undefined);
+          setError('Session expired — sign in again.');
+          setDataLoading(false);
+          return;
+        }
         setSubscriptionStatus('active');
         setEntitlement(null);
-        // Billing is down, so no dashboard request fires here; the Refresh button is the way back.
-        // Stop the skeletons regardless, or every card spins forever on an outage.
-        setDataLoading(false);
+        setError('Could not confirm subscription — showing cached access. Hit Refresh; if this persists the backend is unreachable.');
+        loadProperties(true, null).finally(() => setDataLoading(false));
       });
   }, [isLoggedIn]);
 
@@ -401,7 +410,7 @@ export default function App() {
       try {
         const health = await getApiHealth();
         if (!health.ok) {
-          setError('The dashboard cannot reach the backend API. Please start the backend on localhost:4000 and refresh the page. (DATABASE_URL must be set, see backend/.env)');
+          setError('The dashboard cannot reach the backend API. Check your connection and hit Refresh. (Dev: start the backend — see property-app/backend/.env).');
           return;
         }
       } catch {
@@ -409,11 +418,19 @@ export default function App() {
       }
 
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        setError('Backend not reachable at http://localhost:4000 — is `npm run dev` running in property-app/backend and is DATABASE_URL set?');
+      if (isApiError(err, 401)) {
+        localStorage.removeItem('property_app_token');
+        localStorage.removeItem('property_app_user');
+        setUser(null);
+        setSubscriptionStatus(null);
+        setError('Session expired — sign in again.');
         return;
       }
-      setError(`Unable to load dashboard data: ${msg}. Please refresh or check backend logs (backend npm run dev).`);
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        setError('Backend not reachable — check your connection and hit Refresh. (Dev: is `npm run dev` running in property-app/backend?)');
+        return;
+      }
+      setError(`Unable to load dashboard data: ${msg}. Please refresh.`);
     }
   }
 
