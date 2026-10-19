@@ -215,21 +215,23 @@ export interface DashboardValue {
   handleTenantsImported: (imported?: Tenant[]) => Promise<void>;
 
   validatePropertyForm: (data: PropertyForm) => Record<string, string>;
-  handlePropertySubmit: (event: FormEvent) => Promise<void> | void;
+  // `override` lets a drawer own its typing locally (fast keystrokes) and hand the
+  // final values up only on submit, instead of re-rendering the whole app per letter.
+  handlePropertySubmit: (event: FormEvent, override?: PropertyForm) => Promise<void> | void;
   handlePropertyUpdate: (event: FormEvent) => Promise<void> | void;
   handlePropertyEditStart: (property: Property) => void;
   handlePropertyDelete: (propertyId: number) => Promise<void>;
-  handleTenantSubmit: (event: FormEvent) => Promise<void> | void;
+  handleTenantSubmit: (event: FormEvent, override?: TenantForm) => Promise<void> | void;
   handleTenantLifecycleAction: (
     tenantId: number,
     action: 'moved_out' | 'archived' | 'delete'
   ) => Promise<void>;
-  handleMaintenanceSubmit: (event: FormEvent) => Promise<void> | void;
+  handleMaintenanceSubmit: (event: FormEvent, override?: MaintenanceForm) => Promise<void> | void;
   handleMaintenanceStatusChange: (id: number, status: string) => Promise<void>;
   handleMaintenanceEscalate: (id: number) => Promise<void>;
   handleMaintenanceDelete: (id: number) => Promise<void>;
   handleManualPaymentReconciliation: (event: FormEvent) => Promise<void> | void;
-  handlePaymentChannelSubmit: (event: FormEvent) => Promise<void> | void;
+  handlePaymentChannelSubmit: (event: FormEvent, override?: PaymentChannelForm) => Promise<void> | void;
   handlePaymentChannelToggle: (channel: PaymentChannel) => Promise<void>;
   handlePaymentChannelSync: (channelId: number) => Promise<void>;
   handlePaymentChannelDelete: (channel: PaymentChannel) => Promise<void>;
@@ -239,7 +241,11 @@ export interface DashboardValue {
 
   openRecordPayment: (invoice: Invoice, tenantId: number, outstanding: number) => void;
   closeRecordPayment: () => void;
-  handleSaveRecordedPayment: (event: FormEvent, invoice: Invoice) => Promise<void>;
+  handleSaveRecordedPayment: (
+    event: FormEvent,
+    invoice: Invoice,
+    override?: { amount: string; method: PaymentMethod; reference: string }
+  ) => Promise<void>;
 
   downloadArrearsCsv: (propertyId?: number) => unknown;
   downloadCollectionRateCsv: () => unknown;

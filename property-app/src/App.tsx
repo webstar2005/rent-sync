@@ -28,8 +28,13 @@ import {
   DashboardContext,
   readPageFromHash,
   type DashboardValue,
+  type MaintenanceForm,
   type ModalId,
   type PageId,
+  type PaymentChannelForm,
+  type PaymentMethod,
+  type PropertyForm,
+  type TenantForm,
 } from './dashboard/context';
 import { AppShell } from './dashboard/shell';
 
@@ -532,15 +537,22 @@ export default function App() {
     setRecordError('');
   }
 
-  async function handleSaveRecordedPayment(event: FormEvent, invoice: Invoice) {
+  async function handleSaveRecordedPayment(
+    event: FormEvent,
+    invoice: Invoice,
+    override?: { amount: string; method: PaymentMethod; reference: string }
+  ) {
     event.preventDefault();
     if (recordingTenantId === null) return;
 
-    const amount = Number(recordAmount);
+    const amount = Number(override?.amount ?? recordAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       setRecordError('Enter the amount you received.');
       return;
     }
+
+    const method = override?.method ?? recordMethod;
+    const reference = override?.reference ?? recordReference;
 
     const paidSoFar = payments
       .filter((payment) => payment.invoice_id === invoice.id && payment.status === 'completed')
@@ -564,8 +576,8 @@ export default function App() {
         invoice_id: invoice.id,
         tenant_id: recordingTenantId,
         amount,
-        payment_method: recordMethod,
-        reference: recordReference.trim() || undefined,
+        payment_method: method,
+        reference: reference.trim() || undefined,
         status: 'completed',
       });
       // Reload so the invoice status, the KPIs and the payments list all reflect the new row.
@@ -660,9 +672,10 @@ export default function App() {
     return e;
   }
 
-  async function handlePropertySubmit(event: FormEvent) {
+  async function handlePropertySubmit(event: FormEvent, override?: PropertyForm) {
     event.preventDefault();
-    const errs = validatePropertyForm(propertyForm);
+    const source = override ?? propertyForm;
+    const errs = validatePropertyForm(source);
     setPropertyErrors(errs);
     if (Object.keys(errs).length > 0) return;
     setLoading(true);
@@ -670,10 +683,10 @@ export default function App() {
 
     try {
       await createProperty({
-        name: propertyForm.name.trim(),
-        address: propertyForm.address.trim(),
-        units: Number(propertyForm.units),
-        rent_due_day: Number(propertyForm.rent_due_day),
+        name: source.name.trim(),
+        address: source.address.trim(),
+        units: Number(source.units),
+        rent_due_day: Number(source.rent_due_day),
       } as any);
 
       setPropertyForm({ name: '', address: '', units: '', rent_due_day: '5' });
@@ -787,17 +800,18 @@ export default function App() {
     }
   }
 
-  async function handlePaymentChannelSubmit(event: FormEvent) {
+  async function handlePaymentChannelSubmit(event: FormEvent, override?: PaymentChannelForm) {
     event.preventDefault();
     setPaymentChannelLoading(true);
     setPaymentChannelError('');
 
+    const form = override ?? paymentChannelForm;
     try {
       await createPaymentChannel({
-        channel_type: paymentChannelForm.channel_type,
-        short_code: paymentChannelForm.short_code.trim(),
-        account_number: paymentChannelForm.account_number.trim() || undefined,
-        description: paymentChannelForm.description.trim() || undefined,
+        channel_type: form.channel_type,
+        short_code: form.short_code.trim(),
+        account_number: form.account_number.trim() || undefined,
+        description: form.description.trim() || undefined,
       });
       setPaymentChannelForm({ channel_type: paymentChannelForm.channel_type, short_code: '', account_number: '', description: '' });
       setModal(null);
@@ -843,19 +857,20 @@ export default function App() {
     }
   }
 
-  async function handleTenantSubmit(event: FormEvent) {
+  async function handleTenantSubmit(event: FormEvent, override?: TenantForm) {
     event.preventDefault();
+    const form = override ?? tenantForm;
     setLoading(true);
     setError('');
 
     try {
       await createTenant({
-        property_id: Number(tenantForm.property_id),
-        name: tenantForm.name,
-        phone: tenantForm.phone,
-        unit_number: tenantForm.unit_number,
-        monthly_rent: Number(tenantForm.monthly_rent),
-        status: tenantForm.status as 'active' | 'pending' | 'moved_out' | 'archived',
+        property_id: Number(form.property_id),
+        name: form.name,
+        phone: form.phone,
+        unit_number: form.unit_number,
+        monthly_rent: Number(form.monthly_rent),
+        status: form.status as 'active' | 'pending' | 'moved_out' | 'archived',
       });
 
       setTenantForm({ property_id: '', name: '', phone: '', unit_number: '', monthly_rent: '0', status: 'active' });
@@ -888,19 +903,20 @@ export default function App() {
     }
   }
 
-  async function handleMaintenanceSubmit(event: FormEvent) {
+  async function handleMaintenanceSubmit(event: FormEvent, override?: MaintenanceForm) {
     event.preventDefault();
+    const form = override ?? maintenanceForm;
     setLoading(true);
     setError('');
 
     try {
       await createMaintenanceRequest({
-        property_id: Number(maintenanceForm.property_id),
-        tenant_id: maintenanceForm.tenant_id ? Number(maintenanceForm.tenant_id) : undefined,
-        title: maintenanceForm.title,
-        description: maintenanceForm.description,
-        priority: maintenanceForm.priority as 'low' | 'medium' | 'high' | 'urgent',
-        status: maintenanceForm.status as 'open' | 'in_progress' | 'resolved' | 'closed',
+        property_id: Number(form.property_id),
+        tenant_id: form.tenant_id ? Number(form.tenant_id) : undefined,
+        title: form.title,
+        description: form.description,
+        priority: form.priority as 'low' | 'medium' | 'high' | 'urgent',
+        status: form.status as 'open' | 'in_progress' | 'resolved' | 'closed',
       });
 
       setMaintenanceForm({ property_id: '', tenant_id: '', title: '', description: '', priority: 'medium', status: 'open' });

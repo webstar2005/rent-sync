@@ -1,4 +1,9 @@
+import { useState } from 'react';
 import { useDashboard } from './context';
+import type {
+  Invoice,
+} from '../lib/api/invoices';
+import type { MaintenanceForm, PaymentChannelForm, PaymentMethod, PropertyForm, TenantForm } from './context';
 import { Button, Drawer, ErrorBanner, Field, Modal } from './ui';
 import { BulkTenantImport } from '../components/BulkTenantImport';
 import { kes } from '../lib/format';
@@ -14,72 +19,81 @@ function AddPropertyDrawer() {
       title="Add property"
       description="Name, address, units and the day rent is due."
     >
-      <form className="space-y-4" onSubmit={(event) => void d.handlePropertySubmit(event)}>
-        <Field label="Property name" htmlFor="prop-name" error={d.propertyErrors.name}>
-          <input
-            id="prop-name"
-            value={d.propertyForm.name}
-            onChange={(event) => d.setPropertyForm({ ...d.propertyForm, name: event.target.value })}
-            className="rs-field"
-            placeholder="Sunset Apartments"
-            aria-invalid={Boolean(d.propertyErrors.name)}
-          />
-        </Field>
-
-        <Field label="Address" htmlFor="prop-address" error={d.propertyErrors.address}>
-          <input
-            id="prop-address"
-            value={d.propertyForm.address}
-            onChange={(event) => d.setPropertyForm({ ...d.propertyForm, address: event.target.value })}
-            className="rs-field"
-            placeholder="12 River Road"
-            aria-invalid={Boolean(d.propertyErrors.address)}
-          />
-        </Field>
-
-        <Field label="Units" htmlFor="prop-units" error={d.propertyErrors.units}>
-          <input
-            id="prop-units"
-            type="number"
-            min="1"
-            placeholder="e.g. 72"
-            value={d.propertyForm.units}
-            onChange={(event) => d.setPropertyForm({ ...d.propertyForm, units: event.target.value })}
-            className="rs-field"
-            aria-invalid={Boolean(d.propertyErrors.units)}
-          />
-        </Field>
-
-        <Field
-          label="Rent due day (landlord dictates)"
-          htmlFor="prop-due"
-          error={d.propertyErrors.rent_due_day}
-          hint="Invoices are dated to this day, so you can start collecting from the 1st. Use Generate invoices to create them."
-        >
-          <select
-            id="prop-due"
-            value={d.propertyForm.rent_due_day}
-            onChange={(event) =>
-              d.setPropertyForm({ ...d.propertyForm, rent_due_day: event.target.value })
-            }
-            className="rs-field"
-            aria-invalid={Boolean(d.propertyErrors.rent_due_day)}
-          >
-            {Array.from({ length: 28 }, (_, i) => String(i + 1)).map((day) => (
-              <option key={day} value={day}>
-                {day}th of each month
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <ErrorBanner>{d.error}</ErrorBanner>
-
-        <Button type="submit" variant="primary" className="w-full" disabled={d.loading}>
-          {d.loading ? 'Saving...' : 'Save property'}
-        </Button>
-      </form>
+      {open && <AddPropertyForm />}
     </Drawer>
+  );
+}
+
+// Typed locally so each keystroke re-renders only this form, not the whole app.
+// Rendered only while the drawer is open, so state resets on every open.
+function AddPropertyForm() {
+  const d = useDashboard();
+  const [form, setForm] = useState<PropertyForm>(d.propertyForm);
+
+  return (
+    <form className="space-y-4" onSubmit={(event) => void d.handlePropertySubmit(event, form)}>
+      <Field label="Property name" htmlFor="prop-name" error={d.propertyErrors.name}>
+        <input
+          id="prop-name"
+          value={form.name}
+          onChange={(event) => setForm({ ...form, name: event.target.value })}
+          className="rs-field"
+          placeholder="Sunset Apartments"
+          aria-invalid={Boolean(d.propertyErrors.name)}
+        />
+      </Field>
+
+      <Field label="Address" htmlFor="prop-address" error={d.propertyErrors.address}>
+        <input
+          id="prop-address"
+          value={form.address}
+          onChange={(event) => setForm({ ...form, address: event.target.value })}
+          className="rs-field"
+          placeholder="12 River Road"
+          aria-invalid={Boolean(d.propertyErrors.address)}
+        />
+      </Field>
+
+      <Field label="Units" htmlFor="prop-units" error={d.propertyErrors.units}>
+        <input
+          id="prop-units"
+          type="number"
+          min="1"
+          placeholder="e.g. 72"
+          value={form.units}
+          onChange={(event) => setForm({ ...form, units: event.target.value })}
+          className="rs-field"
+          aria-invalid={Boolean(d.propertyErrors.units)}
+        />
+      </Field>
+
+      <Field
+        label="Rent due day (landlord dictates)"
+        htmlFor="prop-due"
+        error={d.propertyErrors.rent_due_day}
+        hint="Invoices are dated to this day, so you can start collecting from the 1st. Use Generate invoices to create them."
+      >
+        <select
+          id="prop-due"
+          value={form.rent_due_day}
+          onChange={(event) => setForm({ ...form, rent_due_day: event.target.value })}
+          className="rs-field"
+          aria-invalid={Boolean(d.propertyErrors.rent_due_day)}
+        >
+          {Array.from({ length: 28 }, (_, i) => String(i + 1)).map((day) => (
+            <option key={day} value={day}>
+              {day}th of each month
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <ErrorBanner>{d.error}</ErrorBanner>
+
+      <Button type="submit" variant="primary" className="w-full" disabled={d.loading}>
+        {d.loading ? 'Saving...' : 'Save property'}
+      </Button>
+    </form>
   );
 }
 
@@ -89,68 +103,79 @@ function AddTenantDrawer() {
 
   return (
     <Drawer open={open} onClose={d.closeModal} title="Add tenant" description="One tenant, one flat.">
-      <form className="space-y-4" onSubmit={(event) => void d.handleTenantSubmit(event)}>
-        <Field label="Property" htmlFor="tenant-property">
-          <select
-            id="tenant-property"
-            value={d.tenantForm.property_id}
-            onChange={(event) => d.setTenantForm({ ...d.tenantForm, property_id: event.target.value })}
-            className="rs-field"
-          >
-            <option value="">Select property</option>
-            {d.properties.map((property) => (
-              <option key={property.id} value={property.id}>
-                {property.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Name" htmlFor="tenant-name">
-          <input
-            id="tenant-name"
-            value={d.tenantForm.name}
-            onChange={(event) => d.setTenantForm({ ...d.tenantForm, name: event.target.value })}
-            className="rs-field"
-          />
-        </Field>
-
-        <Field label="Phone" htmlFor="tenant-phone">
-          <input
-            id="tenant-phone"
-            value={d.tenantForm.phone}
-            onChange={(event) => d.setTenantForm({ ...d.tenantForm, phone: event.target.value })}
-            className="rs-field"
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Unit" htmlFor="tenant-unit">
-            <input
-              id="tenant-unit"
-              value={d.tenantForm.unit_number}
-              onChange={(event) => d.setTenantForm({ ...d.tenantForm, unit_number: event.target.value })}
-              className="rs-field"
-            />
-          </Field>
-          <Field label="Rent" htmlFor="tenant-rent">
-            <input
-              id="tenant-rent"
-              type="number"
-              value={d.tenantForm.monthly_rent}
-              onChange={(event) => d.setTenantForm({ ...d.tenantForm, monthly_rent: event.target.value })}
-              className="rs-field"
-            />
-          </Field>
-        </div>
-
-        <ErrorBanner>{d.error}</ErrorBanner>
-
-        <Button type="submit" variant="primary" className="w-full" disabled={d.loading}>
-          {d.loading ? 'Saving...' : 'Add tenant'}
-        </Button>
-      </form>
+      {open && <AddTenantForm />}
     </Drawer>
+  );
+}
+
+// Typed locally so each keystroke re-renders only this form, not the whole app.
+// Rendered only while the drawer is open, so state resets on every open.
+function AddTenantForm() {
+  const d = useDashboard();
+  const [form, setForm] = useState<TenantForm>(d.tenantForm);
+
+  return (
+    <form className="space-y-4" onSubmit={(event) => void d.handleTenantSubmit(event, form)}>
+      <Field label="Property" htmlFor="tenant-property">
+        <select
+          id="tenant-property"
+          value={form.property_id}
+          onChange={(event) => setForm({ ...form, property_id: event.target.value })}
+          className="rs-field"
+        >
+          <option value="">Select property</option>
+          {d.properties.map((property) => (
+            <option key={property.id} value={property.id}>
+              {property.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Name" htmlFor="tenant-name">
+        <input
+          id="tenant-name"
+          value={form.name}
+          onChange={(event) => setForm({ ...form, name: event.target.value })}
+          className="rs-field"
+        />
+      </Field>
+
+      <Field label="Phone" htmlFor="tenant-phone">
+        <input
+          id="tenant-phone"
+          value={form.phone}
+          onChange={(event) => setForm({ ...form, phone: event.target.value })}
+          className="rs-field"
+        />
+      </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Unit" htmlFor="tenant-unit">
+          <input
+            id="tenant-unit"
+            value={form.unit_number}
+            onChange={(event) => setForm({ ...form, unit_number: event.target.value })}
+            className="rs-field"
+          />
+        </Field>
+        <Field label="Rent" htmlFor="tenant-rent">
+          <input
+            id="tenant-rent"
+            type="number"
+            value={form.monthly_rent}
+            onChange={(event) => setForm({ ...form, monthly_rent: event.target.value })}
+            className="rs-field"
+          />
+        </Field>
+      </div>
+
+      <ErrorBanner>{d.error}</ErrorBanner>
+
+      <Button type="submit" variant="primary" className="w-full" disabled={d.loading}>
+        {d.loading ? 'Saving...' : 'Add tenant'}
+      </Button>
+    </form>
   );
 }
 
@@ -185,16 +210,31 @@ function AddChannelDrawer() {
       title="Add payment channel"
       description="PayHero requires an ownership-confirmation step before incoming payments activate."
     >
-      <form className="space-y-4" onSubmit={(event) => void d.handlePaymentChannelSubmit(event)}>
+      {open && <AddChannelForm />}
+    </Drawer>
+  );
+}
+
+// Typed locally so each keystroke re-renders only this form, not the whole app.
+// Rendered only while the drawer is open, so state resets on every open.
+function AddChannelForm() {
+  const d = useDashboard();
+  const [form, setForm] = useState<PaymentChannelForm>(d.paymentChannelForm);
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(event) => void d.handlePaymentChannelSubmit(event, form)}
+    >
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Channel type" htmlFor="ch-type">
             <select
               id="ch-type"
-              value={d.paymentChannelForm.channel_type}
+              value={form.channel_type}
               onChange={(event) =>
-                d.setPaymentChannelForm({
-                  ...d.paymentChannelForm,
-                  channel_type: event.target.value as typeof d.paymentChannelForm.channel_type,
+                setForm({
+                  ...form,
+                  channel_type: event.target.value as PaymentChannelForm['channel_type'],
                 })
               }
               className="rs-field"
@@ -208,10 +248,8 @@ function AddChannelDrawer() {
           <Field label="Short code / Paybill / Till / Bank number" htmlFor="ch-code">
             <input
               id="ch-code"
-              value={d.paymentChannelForm.short_code}
-              onChange={(event) =>
-                d.setPaymentChannelForm({ ...d.paymentChannelForm, short_code: event.target.value })
-              }
+              value={form.short_code}
+              onChange={(event) => setForm({ ...form, short_code: event.target.value })}
               placeholder="e.g. 522522"
               className="rs-field"
             />
@@ -221,10 +259,8 @@ function AddChannelDrawer() {
         <Field label="Account number (bank / paybill account — optional)" htmlFor="ch-acct">
           <input
             id="ch-acct"
-            value={d.paymentChannelForm.account_number}
-            onChange={(event) =>
-              d.setPaymentChannelForm({ ...d.paymentChannelForm, account_number: event.target.value })
-            }
+            value={form.account_number}
+            onChange={(event) => setForm({ ...form, account_number: event.target.value })}
             className="rs-field"
           />
         </Field>
@@ -232,10 +268,8 @@ function AddChannelDrawer() {
         <Field label="Description" htmlFor="ch-desc">
           <input
             id="ch-desc"
-            value={d.paymentChannelForm.description}
-            onChange={(event) =>
-              d.setPaymentChannelForm({ ...d.paymentChannelForm, description: event.target.value })
-            }
+            value={form.description}
+            onChange={(event) => setForm({ ...form, description: event.target.value })}
             placeholder="e.g. Main Paybill"
             className="rs-field"
           />
@@ -247,12 +281,11 @@ function AddChannelDrawer() {
           type="submit"
           variant="primary"
           className="w-full"
-          disabled={d.paymentChannelLoading || !d.paymentChannelForm.short_code.trim()}
+          disabled={d.paymentChannelLoading || !form.short_code.trim()}
         >
           {d.paymentChannelLoading ? 'Registering with PayHero...' : 'Add payment channel'}
         </Button>
-      </form>
-    </Drawer>
+    </form>
   );
 }
 
@@ -267,101 +300,186 @@ function NewMaintenanceDrawer() {
       title="New maintenance request"
       description="Log a repair and it stays tracked until it is resolved."
     >
-      <form className="space-y-4" onSubmit={(event) => void d.handleMaintenanceSubmit(event)}>
-        <Field label="Property" htmlFor="mnt-property">
-          <select
-            id="mnt-property"
-            value={d.maintenanceForm.property_id}
-            onChange={(event) =>
-              d.setMaintenanceForm({ ...d.maintenanceForm, property_id: event.target.value })
-            }
-            className="rs-field"
-          >
-            <option value="">Select property</option>
-            {d.properties.map((property) => (
-              <option key={property.id} value={property.id}>
-                {property.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Tenant" htmlFor="mnt-tenant">
-          <select
-            id="mnt-tenant"
-            value={d.maintenanceForm.tenant_id}
-            onChange={(event) =>
-              d.setMaintenanceForm({ ...d.maintenanceForm, tenant_id: event.target.value })
-            }
-            className="rs-field"
-          >
-            <option value="">Optional tenant</option>
-            {d.tenants.map((tenant) => (
-              <option key={tenant.id} value={tenant.id}>
-                {tenant.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Title" htmlFor="mnt-title">
-          <input
-            id="mnt-title"
-            value={d.maintenanceForm.title}
-            onChange={(event) => d.setMaintenanceForm({ ...d.maintenanceForm, title: event.target.value })}
-            className="rs-field"
-          />
-        </Field>
-
-        <Field label="Priority" htmlFor="mnt-priority">
-          <select
-            id="mnt-priority"
-            value={d.maintenanceForm.priority}
-            onChange={(event) =>
-              d.setMaintenanceForm({ ...d.maintenanceForm, priority: event.target.value })
-            }
-            className="rs-field"
-          >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
-          </select>
-        </Field>
-
-        <Field label="Description" htmlFor="mnt-description">
-          <textarea
-            id="mnt-description"
-            value={d.maintenanceForm.description}
-            onChange={(event) =>
-              d.setMaintenanceForm({ ...d.maintenanceForm, description: event.target.value })
-            }
-            rows={3}
-            className="rs-field"
-          />
-        </Field>
-
-        <Field label="Status" htmlFor="mnt-status">
-          <select
-            id="mnt-status"
-            value={d.maintenanceForm.status}
-            onChange={(event) => d.setMaintenanceForm({ ...d.maintenanceForm, status: event.target.value })}
-            className="rs-field"
-          >
-            <option value="open">Open</option>
-            <option value="in_progress">In progress</option>
-            <option value="resolved">Resolved</option>
-            <option value="closed">Closed</option>
-          </select>
-        </Field>
-
-        <ErrorBanner>{d.error}</ErrorBanner>
-
-        <Button type="submit" variant="primary" className="w-full" disabled={d.loading}>
-          {d.loading ? 'Saving...' : 'Create maintenance request'}
-        </Button>
-      </form>
+      {open && <NewMaintenanceForm />}
     </Drawer>
+  );
+}
+
+// Typed locally so each keystroke re-renders only this form, not the whole app.
+// Rendered only while the drawer is open, so state resets on every open.
+function NewMaintenanceForm() {
+  const d = useDashboard();
+  const [form, setForm] = useState<MaintenanceForm>(d.maintenanceForm);
+
+  return (
+    <form className="space-y-4" onSubmit={(event) => void d.handleMaintenanceSubmit(event, form)}>
+      <Field label="Property" htmlFor="mnt-property">
+        <select
+          id="mnt-property"
+          value={form.property_id}
+          onChange={(event) => setForm({ ...form, property_id: event.target.value })}
+          className="rs-field"
+        >
+          <option value="">Select property</option>
+          {d.properties.map((property) => (
+            <option key={property.id} value={property.id}>
+              {property.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Tenant" htmlFor="mnt-tenant">
+        <select
+          id="mnt-tenant"
+          value={form.tenant_id}
+          onChange={(event) => setForm({ ...form, tenant_id: event.target.value })}
+          className="rs-field"
+        >
+          <option value="">Optional tenant</option>
+          {d.tenants.map((tenant) => (
+            <option key={tenant.id} value={tenant.id}>
+              {tenant.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Title" htmlFor="mnt-title">
+        <input
+          id="mnt-title"
+          value={form.title}
+          onChange={(event) => setForm({ ...form, title: event.target.value })}
+          className="rs-field"
+        />
+      </Field>
+
+      <Field label="Priority" htmlFor="mnt-priority">
+        <select
+          id="mnt-priority"
+          value={form.priority}
+          onChange={(event) => setForm({ ...form, priority: event.target.value })}
+          className="rs-field"
+        >
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </Field>
+
+      <Field label="Description" htmlFor="mnt-description">
+        <textarea
+          id="mnt-description"
+          value={form.description}
+          onChange={(event) => setForm({ ...form, description: event.target.value })}
+          rows={3}
+          className="rs-field"
+        />
+      </Field>
+
+      <Field label="Status" htmlFor="mnt-status">
+        <select
+          id="mnt-status"
+          value={form.status}
+          onChange={(event) => setForm({ ...form, status: event.target.value })}
+          className="rs-field"
+        >
+          <option value="open">Open</option>
+          <option value="in_progress">In progress</option>
+          <option value="resolved">Resolved</option>
+          <option value="closed">Closed</option>
+        </select>
+      </Field>
+
+      <ErrorBanner>{d.error}</ErrorBanner>
+
+      <Button type="submit" variant="primary" className="w-full" disabled={d.loading}>
+        {d.loading ? 'Saving...' : 'Create maintenance request'}
+      </Button>
+    </form>
+  );
+}
+
+// The record-a-payment form is mounted only while recording (unmount resets it) and types
+// into local state — every other keystroke was re-rendering the whole app through context.
+function RecordPaymentForm({
+  invoice,
+  outstanding,
+  onCancel,
+}: {
+  invoice: Invoice;
+  outstanding: number;
+  onCancel: () => void;
+}) {
+  const d = useDashboard();
+  const [amount, setAmount] = useState(outstanding > 0 ? outstanding.toFixed(2) : '');
+  const [method, setMethod] = useState<PaymentMethod>('mobile_money');
+  const [reference, setReference] = useState('');
+
+  return (
+    <form
+      onSubmit={(event) =>
+        void d.handleSaveRecordedPayment(event, invoice, { amount, method, reference })
+      }
+      className="mt-3 space-y-3 rounded-xl border border-line bg-card p-3"
+    >
+      <p className="text-xs text-muted">
+        For money that reached you outside a registered channel — M-Pesa Send
+        Money to your number, cash, or a bank transfer. There is no automatic
+        confirmation for these, so record it here.
+      </p>
+
+      <Field label="Amount received (KES)" htmlFor={`record-amount-${invoice.id}`}>
+        <input
+          id={`record-amount-${invoice.id}`}
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          min="0"
+          value={amount}
+          onChange={(event) => setAmount(event.target.value)}
+          className="rs-field"
+        />
+      </Field>
+
+      <Field label="How did it arrive?" htmlFor={`record-method-${invoice.id}`}>
+        <select
+          id={`record-method-${invoice.id}`}
+          value={method}
+          onChange={(event) => setMethod(event.target.value as PaymentMethod)}
+          className="rs-field"
+        >
+          <option value="mobile_money">M-Pesa Send Money</option>
+          <option value="bank_transfer">Bank transfer</option>
+          <option value="cash">Cash</option>
+          <option value="card">Card</option>
+          <option value="other">Other</option>
+        </select>
+      </Field>
+
+      <Field label="Reference (optional)" htmlFor={`record-ref-${invoice.id}`}>
+        <input
+          id={`record-ref-${invoice.id}`}
+          type="text"
+          value={reference}
+          onChange={(event) => setReference(event.target.value)}
+          placeholder="e.g. QJG7X4K2PL"
+          className="rs-field"
+        />
+      </Field>
+
+      <ErrorBanner>{d.recordError}</ErrorBanner>
+
+      <div className="flex gap-2">
+        <Button type="submit" variant="primary" className="flex-1" disabled={d.savingPayment}>
+          {d.savingPayment ? 'Saving…' : 'Save payment'}
+        </Button>
+        <Button variant="secondary" disabled={d.savingPayment} onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -482,68 +600,11 @@ function TenantDetailModal() {
                         </Button>
 
                         {recording && (
-                          <form
-                            onSubmit={(event) => void d.handleSaveRecordedPayment(event, invoice)}
-                            className="mt-3 space-y-3 rounded-xl border border-line bg-card p-3"
-                          >
-                            <p className="text-xs text-muted">
-                              For money that reached you outside a registered channel — M-Pesa Send
-                              Money to your number, cash, or a bank transfer. There is no automatic
-                              confirmation for these, so record it here.
-                            </p>
-
-                            <Field label="Amount received (KES)" htmlFor={`record-amount-${invoice.id}`}>
-                              <input
-                                id={`record-amount-${invoice.id}`}
-                                type="number"
-                                inputMode="decimal"
-                                step="0.01"
-                                min="0"
-                                value={d.recordAmount}
-                                onChange={(event) => d.setRecordAmount(event.target.value)}
-                                className="rs-field"
-                              />
-                            </Field>
-
-                            <Field label="How did it arrive?" htmlFor={`record-method-${invoice.id}`}>
-                              <select
-                                id={`record-method-${invoice.id}`}
-                                value={d.recordMethod}
-                                onChange={(event) =>
-                                  d.setRecordMethod(event.target.value as typeof d.recordMethod)
-                                }
-                                className="rs-field"
-                              >
-                                <option value="mobile_money">M-Pesa Send Money</option>
-                                <option value="bank_transfer">Bank transfer</option>
-                                <option value="cash">Cash</option>
-                                <option value="card">Card</option>
-                                <option value="other">Other</option>
-                              </select>
-                            </Field>
-
-                            <Field label="Reference (optional)" htmlFor={`record-ref-${invoice.id}`}>
-                              <input
-                                id={`record-ref-${invoice.id}`}
-                                type="text"
-                                value={d.recordReference}
-                                onChange={(event) => d.setRecordReference(event.target.value)}
-                                placeholder="e.g. QJG7X4K2PL"
-                                className="rs-field"
-                              />
-                            </Field>
-
-                            <ErrorBanner>{d.recordError}</ErrorBanner>
-
-                            <div className="flex gap-2">
-                              <Button type="submit" variant="primary" className="flex-1" disabled={d.savingPayment}>
-                                {d.savingPayment ? 'Saving…' : 'Save payment'}
-                              </Button>
-                              <Button variant="secondary" disabled={d.savingPayment} onClick={d.closeRecordPayment}>
-                                Cancel
-                              </Button>
-                            </div>
-                          </form>
+                          <RecordPaymentForm
+                            invoice={invoice}
+                            outstanding={Number(invoice.amount) - invoicePaid}
+                            onCancel={d.closeRecordPayment}
+                          />
                         )}
                       </>
                     )}
