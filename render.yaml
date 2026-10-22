@@ -27,8 +27,8 @@ services:
       - key: LOG_LEVEL
         value: info
       - key: CORS_ORIGIN
-        # Fail-closed CORS: only the deployed dashboard is allowed. Add more origins comma-separated.
-        value: https://app.rentsync.africa
+        # Fail-closed CORS: dashboard + marketing site (the /pay STK Push form) are allowed.
+        value: https://app.rentsync.africa,https://rentsync.africa,https://www.rentsync.africa
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
@@ -48,3 +48,14 @@ services:
         sync: false # PayHero portal -> API Keys
       - key: PAYHERO_ACCOUNT_ID
         sync: false # PayHero profile page
+      # Safaricom Daraja STK Push (sandbox first — flip MPESA_BASE_URL when going live)
+      - key: MPESA_CONSUMER_KEY
+        sync: false # Daraja portal app credentials
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_SHORTCODE
+        sync: false # the Paybill number Safaricom issued
+      - key: MPESA_PASSKEY
+        sync: false # Lipa Na M-Pesa passkey
+      - key: MPESA_BASE_URL
+        value: https://sandbox.safaricom.co.ke

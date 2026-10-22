@@ -3,21 +3,18 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { contact } from "@/content/contact";
 import { payment } from "@/content/payment";
-import { pricingTiers } from "@/content/pricing";
 import { siteConfig } from "@/content/site";
 import { JsonLd } from "@/components/JsonLd";
 import { breadcrumbSchema, pageMetadata } from "@/lib/seo";
+import { PayForm } from "@/components/sections/PayForm";
 
 export const metadata = pageMetadata({
   title: "Pay for Your Rent Sync Subscription",
   description:
-    "Pay your Rent Sync subscription by M-Pesa Send Money to 0790 325 943, then submit your confirmation code to activate your account.",
+    "Pay your Rent Sync subscription with an M-Pesa prompt to your phone — approve it with your PIN and your account activates automatically. Send Money also available.",
   path: "/pay",
   imageAlt: "Rent Sync M-Pesa subscription payment instructions",
 });
-
-/** Enterprise is priced by conversation, so it has no fixed amount to send. */
-const payable = pricingTiers.filter((t) => t.billingUnit);
 
 export default function PayPage() {
   return (
@@ -28,96 +25,31 @@ export default function PayPage() {
         <section className="bg-white py-16 lg:py-20">
           <div className="mx-auto max-w-content px-6 lg:px-8">
             <div className="mx-auto max-w-3xl">
-              <p className="text-xs font-semibold uppercase tracking-widest text-burgundy-600">
-                Payment
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-burgundy-600">Payment</p>
               <h1 className="mt-3 font-heading text-h1 text-ink">Switch your account on</h1>
               <p className="mt-4 text-body-lg text-gray-500">
-                Rent Sync subscriptions are paid by {payment.method} straight to our business
-                number. There is no card form and no paybill to look up — it is a transfer to a
-                phone number, and we confirm it by hand.
+                Pay your Rent Sync subscription with an <strong>M-Pesa prompt</strong> sent straight
+                to your phone — enter your PIN and your account activates automatically. Prefer{" "}
+                {payment.method} to {payment.phone}? That still works too.
               </p>
             </div>
           </div>
         </section>
 
-        <section className="bg-gray-100 py-12 lg:py-16">
-          <div className="mx-auto max-w-content px-6 lg:px-8">
-            <div className="grid gap-8 lg:grid-cols-[1.1fr_1fr] lg:gap-12">
-              {/* Amount to send */}
-              <div>
-                <h2 className="font-heading text-h3 text-ink">How much to send</h2>
-                <p className="mt-2 text-small text-gray-500">
-                  Send the monthly amount for your band. If you have fewer than 5 units, message
-                  us first and we will price it for you.
-                </p>
-                <ul className="mt-6 space-y-3">
-                  {payable.map((tier) => (
-                    <li
-                      key={tier.id}
-                      id={tier.id}
-                      className="scroll-mt-28 rounded-xl border border-black/[.04] bg-white p-5 shadow-card"
-                    >
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="font-heading text-h4 text-ink">{tier.name}</span>
-                        <span className="font-heading text-h4 text-burgundy-600">
-                          {tier.price}
-                          <span className="text-small font-normal text-gray-500">
-                            {tier.billingUnit}
-                          </span>
-                        </span>
-                      </div>
-                      <p className="mt-1 text-small text-gray-500">{tier.description}</p>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-4 text-small text-gray-500">
-                  Running 100+ units?{" "}
-                  <a href={contact.phoneHref} className="font-medium text-burgundy-600 hover:underline">
-                    Call {contact.phone}
-                  </a>{" "}
-                  and we will put a custom plan together.
-                </p>
-              </div>
-
-              {/* The number, and the steps */}
-              <div>
-                <h2 className="font-heading text-h3 text-ink">Where to send it</h2>
-                <div className="mt-6 rounded-xl border border-burgundy-600/20 bg-burgundy-50 p-6">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-burgundy-700">
-                    Send Money to
-                  </p>
-                  <p className="mt-2 font-heading text-h3 break-words text-ink">
-                    {payment.phone}
-                  </p>
-                  <p className="mt-3 text-small leading-relaxed text-gray-700">
-                    {payment.expectNameNote}
-                  </p>
-                </div>
-
-                <ol className="mt-8 space-y-4">
-                  {payment.steps.map((step, i) => (
-                    <li key={step} className="flex gap-3.5">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-burgundy-600 text-xs font-semibold text-white">
-                        {i + 1}
-                      </span>
-                      <span className="pt-0.5 text-body leading-relaxed text-gray-700">{step}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            </div>
-          </div>
-        </section>
+        <PayForm />
 
         <section className="bg-white py-16 lg:py-20">
           <div className="mx-auto max-w-content px-6 lg:px-8">
             <div className="mx-auto max-w-3xl">
-              <h2 className="font-heading text-h3 text-ink">Then tell us it went through</h2>
+              <h2 className="font-heading text-h3 text-ink">After payment</h2>
               <p className="mt-3 text-body text-gray-500">
-                A Send Money transfer carries no reference we can read, so we cannot match it to
-                your account on our own. Hand us the two things below and we will match it against
-                our statement and switch you on.
+                <strong>M-Pesa prompt:</strong> your account activates the moment you approve the
+                prompt on your phone — no further action needed.
+              </p>
+              <p className="mt-3 text-body text-gray-500">
+                <strong>Send Money:</strong> a Send Money transfer carries no reference we can read,
+                so we cannot match it to your account on our own. Hand us the confirmation code from
+                your SMS and we will match it against our statement and switch you on.
               </p>
 
               <ul className="mt-6 space-y-3">

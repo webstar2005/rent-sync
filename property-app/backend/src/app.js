@@ -17,6 +17,7 @@ import reportRoutes from './routes/report.routes.js';
 import cronRoutes from './routes/cron.routes.js';
 import channelRoutes from './routes/channel.routes.js';
 import billingRoutes from './routes/billing.routes.js';
+import stkPushBillingRoutes from './routes/stkPushBilling.routes.js';
 import payheroWebhookRoutes from './routes/payheroWebhook.routes.js';
 
 const app = express();
@@ -126,6 +127,10 @@ app.use('/api/auth', authRoutes);
 // Mounted before the product routers and WITHOUT requirePaid: a landlord who has not paid still
 // has to be able to read what they owe and submit their M-Pesa confirmation code.
 app.use('/api/billing', billingRoutes);
+// Subscription STK Push (marketing site /pay form + Safaricom callback). Public by design: the
+// caller is either a browser on rentsunc.africa or Safaricom's callback — amount is resolved
+// server-side from PLANS, never trusted from the client.
+app.use('/api/billing', stkPushBillingRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/units', unitRoutes);
 app.use('/api/tenants', tenantRoutes);
